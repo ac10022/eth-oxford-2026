@@ -1,0 +1,2976 @@
+import { HomeIcon } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+
+
+
+export default function error() {
+  return (
+    <main className="flex h-full flex-col overflow-hidden select-none bg-radial from-[#BA2237] from-30% to-[#261447]">
+      <div className="flex-col lg:flex-row flex">
+        <div className="flex justify-center flex-col ml-20 text-white gap-y-5 w-[550]">
+          <Image src="LogoWhite.svg" width={200} height={200} alt="Logo">
+          </Image>
+          <h1 className="mt-15 text-2xl md:text-5xl font-bold">
+            WHOOPS... <br /> Something went wrong!
+          </h1>
+          <div className="mt-5 justify-center items-center">
+            <Link href="./" className="text-2xl md:text-4xl font-bold rounded-2xl bg-[#F30000]/60 w-[200] md:w-[300] items-center justify-center flex">
+              <div className="flex flex-row m-2">
+                <HomeIcon className="mt-2 size-5 md:size-7 mr-2"></HomeIcon>
+                Back to Home
+              </div>
+            </Link>
+          </div>
+        </div>
+          <div className="relative flex items-center justify-center ml-30 mt-45 w-[200] h-[250] md:w-[500] md:h-[400] hover:scale-110">
+                <div className="absolute z-10 w-64 aspect-5/7 rounded-xl bg-blue-950 outline outline-white shadow-2xl flex items-center justify-center rotate-[-8deg] -translate-x-32 scale-95">
+                    <div className="text-white text-3xl font-bold flex items-center justify-center flex-col"><Image src="../CardIcon.svg" width={120} height={120} alt="Logo"></Image>ZK-BLUFF</div>
+                </div>
+                <div className="absolute z-20 w-64 aspect-5/7 rounded-xl bg-blue-950 outline outline-white shadow-2xl flex items-center justify-center scale-105">
+                    <div className="text-white text-3xl font-bold flex items-center justify-center flex-col"><Image src="../CardIcon.svg" width={120} height={120} alt="Logo"></Image>ZK-BLUFF</div>
+                </div>
+                <div className="absolute z-10 w-64 aspect-5/7 rounded-xl bg-blue-950 outline outline-white shadow-2xl flex items-center justify-center rotate-[8deg] translate-x-32 scale-95">
+                    <div className="text-white text-3xl font-bold flex items-center justify-center flex-col"><Image src="../CardIcon.svg" width={120} height={120} alt="Logo"></Image>ZK-BLUFF</div>
+              </div>
+          </div>
+      </div>
+    </main>
+  );
+}"use client"
+
+import { useEffect, useState } from "react"
+import Card from "@/components/card"
+import { createDeck, shuffleDeck } from "@/lib/deck"
+
+export default function Home() {
+  const [hand, setHand] = useState([])
+
+  useEffect(() => {
+    const shuffled = shuffleDeck(createDeck())
+    setHand(shuffled.slice(0, 5))
+  }, [])
+
+  return (
+    <main className="min-h-screen bg-linear-to-tl from-[#9F2A2A] to-[#E04C4C] p-6 select-none">
+      <button
+        className="mb-6 rounded bg-transparent px-4 py-2 shadow-md hover:scale-105 text-white font-bold"
+        onClick={() => {
+          const shuffled = shuffleDeck(createDeck())
+          setHand(shuffled.slice(0, 5))
+        }}
+      >
+        Deal 10 Cards
+      </button>
+
+      <div className="flex justify-center gap-4 flex-row">
+        {hand.map((card, index) => (
+          <Card key={index} card={card} />
+        ))}
+      </div>
+    </main>
+  )
+}
+
+"use client"
+
+import { useEffect, useState } from "react"
+import Card from "@/components/card"
+import { createDeck, shuffleDeck } from "@/lib/deck"
+import { useSearchParams } from "next/navigation";
+import { useRouter } from 'next/navigation';
+import { encodeGameState, decodeGameState } from '@/lib/xor';
+
+export default function Home() {
+  const router = useRouter();
+  const searchParams = useSearchParams(); 
+
+  // --- STATE ---
+  const [hand, setHand] = useState([])
+  const [centerCard, setCenterCard] = useState(null) 
+  const [discardPile, setDiscardPile] = useState([]) 
+  const [targetRank, setTargetRank] = useState("A") 
+  const [allHands, setAllHands] = useState([])
+  const [curPlayerIndex, setCurPlayerIndex] = useState(0)
+  const [selectedIndices, setSelectedIndices] = useState([])
+  
+  const [lastClaim, setLastClaim] = useState("")
+  const [isDeclaring, setIsDeclaring] = useState(false)
+  const [isFirstTurn, setIsFirstTurn] = useState(true)
+
+  const [playerNames, setPlayerNames] = useState(["Host"]);
+  const [playerCount, setPlayerCount] = useState(3);
+
+  
+
+  // --- CONSTANTS ---
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+  
+  const getNextRank = (currentRank) => {
+     if (!currentRank) return "A"; 
+     const idx = ranks.indexOf(currentRank);
+     return ranks[(idx + 1) % ranks.length];
+  }
+
+  // --- GAME SETUP ---
+  const dealCards = (playerCount) => {
+    const deck = createDeck(false)
+    const shuffled = shuffleDeck(deck)
+    const players = playerCount;
+    const cardsPerPlayer = Math.floor(51 / players)
+
+    const hands = []
+    for (let index = 0; index < players; index++) {
+        hands.push(shuffled.splice(-cardsPerPlayer))
+    }
+
+    const center = shuffled.pop()
+    let playerNum = 0
+    for (const card of shuffled) { 
+        hands[playerNum].push(card)
+        playerNum = (playerNum + 1) % players
+    }
+
+    return { hands, centerCard: center, initialPile: [center] }
+  }
+
+  // --- INTERACTION ---
+  const toggleSelectCard = (index) => {
+    let newIndices
+    if (selectedIndices.includes(index)) {
+      newIndices = selectedIndices.filter(i => i !== index)
+    } else {
+      newIndices = [...selectedIndices, index]
+    }
+    setSelectedIndices(newIndices)
+    if (newIndices.length === 0) setIsDeclaring(false)
+  }
+
+  const handleSubmit = () => {
+    setIsDeclaring(true)
+  }
+
+  // --- CORE LOGIC ---
+
+  const confirmClaim = (claimedRank) => {
+    if (selectedIndices.length === 0) {
+      setIsDeclaring(false)
+      return
+    }
+
+    const cardsToRemove = selectedIndices.length
+    
+    // 1. Calculate New State LOCALLY
+    const playerClaim = hand.filter((_, idx) => selectedIndices.includes(idx))
+    const newHand = hand.filter((_, idx) => !selectedIndices.includes(idx))
+    
+    const newAllHands = [...allHands]
+    newAllHands[curPlayerIndex] = newHand
+
+    // 2. Logic for the Center Card / Discard Pile
+    const newCenterCard = { ...centerCard, rank: claimedRank };
+    const newDiscardPile = [...discardPile, ...playerClaim];
+
+    // 3. Calculate the NEXT target rank
+    const nextTargetRank = getNextRank(claimedRank);
+
+    // 4. Update Visual State
+    const playerName = playerNames[curPlayerIndex] || `Player ${curPlayerIndex + 1}`;
+    const claimMsg = `${playerName} claimed ${cardsToRemove} ${claimedRank}(s)`;
+    
+    setHand(newHand)
+    setAllHands(newAllHands)
+    setCenterCard(newCenterCard)
+    setDiscardPile(newDiscardPile)
+    setLastClaim(claimMsg)
+    setSelectedIndices([])
+    setIsDeclaring(false)
+    
+    // 5. Pass Data to Singleplayer (Menu)
+    // We pass an array for the claim: [playerIndex, count, rank]
+    const newClaimArray = [curPlayerIndex, cardsToRemove, claimedRank]
+    
+    goBackToMenuForNextTurn(newAllHands, newCenterCard, newClaimArray, nextTargetRank, playerClaim, newDiscardPile)
+  }
+
+  const goBackToMenuForNextTurn = (updatedAllHands, updatedCenterCard, updatedLastClaim, updatedTargetRank, actualClaim, updatedDiscardPile) => {
+    
+    const gameState = {
+      count: playerCount,
+      nextIndex: (curPlayerIndex + 1) % playerCount,
+      allHands: updatedAllHands,     
+      centerCard: updatedCenterCard, 
+      lastClaim: updatedLastClaim,   
+      targetRank: updatedTargetRank,
+      actualClaim: actualClaim,
+      names: playerNames,
+      discardPile: updatedDiscardPile ,
+      ai: 1,
+    };
+
+    const encryptedData = encodeGameState(gameState);
+    
+    const params = new URLSearchParams();
+    params.set("data", encryptedData);
+    
+    router.push(`/singleplayer?${params.toString()}`);
+  }
+
+  // --- LOAD GAME DATA ---
+    useEffect(() => {
+      const data = searchParams.get("data");
+      if (data) {
+        const decrypted = decodeGameState(data);
+        if (decrypted) {
+          localStorage.setItem("game-state", data);
+
+          setPlayerNames(decrypted.names);
+          setPlayerCount(decrypted.count);
+
+          if (!decrypted.allHands || decrypted.allHands === "") { 
+            // Fresh Game
+            const { hands, centerCard, initialPile } = dealCards(decrypted.count);
+            setAllHands(hands);
+            setCenterCard(centerCard);
+            setDiscardPile(initialPile);
+            setHand(hands[0]);
+            setTargetRank(getNextRank(centerCard.rank))
+            setIsFirstTurn(true);
+          } else { 
+            // Existing Game
+            setAllHands(decrypted.allHands);
+            setCenterCard(decrypted.centerCard);
+            setDiscardPile(decrypted.discardPile || []); 
+
+            // Handle Last Claim Message
+            if (Array.isArray(decrypted.lastClaim)) {
+              // Reconstruct string for display
+              const pIdx = decrypted.lastClaim[0];
+              const pName = decrypted.names[pIdx] || `Player ${pIdx + 1}`;
+              setLastClaim(`${pName} claimed ${decrypted.lastClaim[1]} ${decrypted.lastClaim[2]}(s)`);
+            } else {
+              setLastClaim(decrypted.lastClaim);
+            }
+
+            setCurPlayerIndex(decrypted.nextIndex);
+            setHand(decrypted.allHands[decrypted.nextIndex]);
+            
+            setTargetRank(decrypted.targetRank || "A"); 
+            setIsFirstTurn(false);
+            const aiIndex = decrypted.count - 1;
+
+            if (decrypted.nextIndex === aiIndex) {
+              setTimeout (() => {
+              console.log("AI TURN");
+
+                const aiHand = decrypted.allHands[aiIndex];
+                const target = decrypted.targetRank;
+
+                // Find valid cards
+                const validCards = aiHand.filter(card => card.rank === target);
+
+                let cardsToPlay;
+
+                if (validCards.length > 0) {
+                  cardsToPlay = [validCards[0]];
+                } else {
+                  cardsToPlay = [aiHand[Math.floor(Math.random() * aiHand.length)]];
+                }
+
+                // Remove from hand
+                const newAllHands = [...decrypted.allHands];
+                newAllHands[aiIndex] =
+                  newAllHands[aiIndex].filter(card => !cardsToPlay.includes(card));
+
+                const newDiscardPile = [...(decrypted.discardPile || []), ...cardsToPlay];
+
+                const newState = {
+                  ...decrypted,
+                  allHands: newAllHands,
+                  discardPile: newDiscardPile,
+                  lastClaim: [aiIndex, cardsToPlay.length, target],
+                  actualClaim: cardsToPlay,
+                  centerCard: { ...decrypted.centerCard, rank: target },
+                  targetRank: getNextRank(target),
+                  nextIndex: 0 // back to human
+                };
+
+              const encoded = encodeGameState(newState);
+              router.push(`/singleplayer?data=${encodeURIComponent(encoded)}`);
+              },1200);
+            }
+          }
+        }
+      } else {
+          // Fallback for dev testing
+          const { hands, centerCard, initialPile } = dealCards(playerCount)
+          setAllHands(hands)
+          setCenterCard(centerCard)
+          setDiscardPile(initialPile)
+          setHand(hands[0])
+          setTargetRank("A")
+      }
+    }, [searchParams]);
+
+if (curPlayerIndex == playerCount - 1) {
+  return (
+  <div className="flex min-h-screen items-center justify-center overflow-auto bg-linear-to-tl bg-radial from-[#BA2237] from-30% to-[#261447] select-none relative">
+    <main className={`min-h-[400] md:min-w-[1100] flex flex-col justify-center items-center p-5 rounded-2xl bg-black/30 sm:items-start z-10`}>
+      <div className="flex w-full justify-center items-center text-4xl text-white animate-bounce">
+        AI is thinking...
+      </div>
+    </main>
+  </div>)
+}
+
+else return (
+    
+    <main className="min-h-screen bg-linear-to-tl from-[#9F2A2A] to-[#E04C4C] p-6 select-none flex flex-col items-center relative">
+
+      {/* DECLARATION POPUP */}
+      {isDeclaring && selectedIndices.length > 0 && (
+        <div className="p-2 bg-black/70  w-[300] md:w-[550] rounded-xl shadow-xl flex flex-col items-center gap-4 fixed z-50 top-1/3">
+          <p className="font-bold text-white text-2xl text-center">
+            YOU ARE PLAYING <span className="text-red-600">{selectedIndices.length}</span> CARD(S).
+          </p>
+          <p className="text-white text-sm font-bold text-center">
+             The required rank is <b className="font-extrabold text-red-600">{targetRank}</b>. 
+          </p>
+          
+          <div className="flex gap-2 flex-wrap justify-center max-w-md">
+            <button 
+                onClick={() => confirmClaim(targetRank)}
+                className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-700 transition-colors shadow-lg text-xl"
+              >
+                CLAIM AS {targetRank}?
+            </button>
+          </div>
+
+          {/* <div className=" text-red-700 text-xl font-bold mt-2">Or lie and claim as:</div>
+          <div className="flex gap-2 flex-wrap justify-center">
+             {ranks.filter(r => r !== targetRank).map(r => (
+                  <button 
+                  key={r}
+                  onClick={() => confirmClaim(r)}
+                  className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-red-100 hover:text-red-600 transition-colors"
+                >
+                  {r}
+                </button>
+             ))}
+          </div> */}
+
+          <button 
+            onClick={() => setIsDeclaring(false)}
+            className="mt-4 text-red-500 font-bold text-2xl hover:text-red-700 hover:cursor-pointer" 
+          >
+            CANCEL SELECTION
+          </button>
+        </div>
+      )}
+    <div className="flex flex-col text-center">
+      <h1 className="text-white text-3xl mb-4 font-bold">{playerNames[curPlayerIndex]?.toUpperCase()}'S TURN</h1>
+
+      {/* CLAIM DISPLAY */}
+      {lastClaim && (
+        <div className="mb-2 bg-black/30 px-6 py-2 rounded-full border border-white/20 text-white animate-pulse font-bold text-center">
+          {lastClaim.toUpperCase()}
+        </div>
+      )}
+
+      {/* CENTER CARD & TARGET INFO */}
+      <div className="flex flex-col items-center gap-2 mb-8 p-4 bg-black/10 rounded-xl">
+        <span className="text-white font-bold text-lg">
+            {discardPile.length === 0 ? "PILE EMPTY" : (isFirstTurn ? "START THE GAME" : "DISCARD PILE")}
+        </span>
+        
+        <div className={discardPile.length === 0 ? "opacity-20" : "opacity-100"}>
+            <Card card={centerCard} isCenter={true} faceDown={!isFirstTurn && discardPile.length > 0} />
+        </div>
+        
+        <div className="flex flex-col items-center mt-2">
+            <p className="text-white/60 text-sm">TARGET RANK FOR YOU:</p>
+            <p className="text-3xl font-extrabold text-blue-300">
+                {targetRank}
+            </p>
+        </div>
+      </div>
+
+      {/* PLAYER CARD COUNT DISPLAY (SIDEBAR) */}
+      <div className="md:absolute md:right-4 md:top-4 mb-5 bg-black/40 p-4 rounded-xl text-white">
+        <h3 className="font-extrabold mb-2">CARD COUNTS</h3>
+        <ul>
+          {allHands.map((h, i) => (
+            <li key={i} className={`flex justify-between gap-4 ${i === curPlayerIndex ? "text-blue-300 font-bold" : "text-white/80"}`}>
+                <span>{playerNames[i] || `P${i+1}`}:</span>
+                <span>{h ? h.length : 0}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+
+      {/* BUTTONS */}
+      <div className="flex gap-4 mb-4">
+        {!isDeclaring && (
+          <button
+            className={`rounded px-6 py-2 font-bold shadow-md transition-all text-white ${
+              selectedIndices.length > 0 
+                ? "bg-blue-400 text-black hover:scale-105 cursor-pointer" 
+                : "bg-gray-800 text-gray-300 cursor-not-allowed opacity-50"
+            }`}
+            onClick={handleSubmit}
+            disabled={selectedIndices.length === 0}
+          >
+            SELECT CARDS ({selectedIndices.length})
+          </button>
+        )}
+      </div>
+
+      {/* HAND */}
+      <div className="flex justify-center -space-x-10 transition-all duration-300 max-w-full overflow-x-auto py-5 mt-auto w-full ">
+        {hand.map((card, index) => (
+          <Card 
+            key={`${curPlayerIndex}-${index}`} 
+            card={card} 
+            isSelected={selectedIndices.includes(index)}
+            onSelect={() => toggleSelectCard(index)}
+          />
+        ))}
+      </div>
+    </main>
+  )
+}import BubbleBackground from "@/components/ui/bubble-background";
+import { AtSignIcon, CircleArrowLeftIcon, ShieldCheckIcon, Wallet2Icon } from "lucide-react";
+import Link from "next/link";
+
+export default function offline() {
+    return (
+        <main className="flex flex-col relative h-full overflow-hidden bg-transparent select-none">
+            <div className="absolute inset-0 z-0">
+            <BubbleBackground/>
+            </div>
+            <div className="relative z-10 w-screen h-screen flex flex-col justify-center items-center">
+                <div className="w-[400] h-[400] md:w-[600] md:h-[600] flex flex-col z-30 bg-black/50 rounded-2xl space-y-5 md:space-y-10">
+                    <div className="flex justify-center items-center space-x-5 flex-row mt-10">
+                    <Link href="/" className="hover:scale-110">
+                        <CircleArrowLeftIcon className="text-white size-10"></CircleArrowLeftIcon>
+                    </Link>
+                    <h1 className="text-5xl text-white font-bold flex text-center justify-center">CHOOSE SIGN IN METHOD:</h1>
+                    </div>
+                    <div className="flex justify-center">
+                        <div className="mt-10 text-4xl text-white space-y-20 flex font-bold flex-col">
+                            <Link href="/" className="flex flex-row items-center hover:scale-110 cursor-pointer">
+                                <ShieldCheckIcon className="size-6 mr-5"></ShieldCheckIcon>
+                                CREATE ACCOUNT
+                            </Link>
+                            <Link href="/sign-in" className="flex flex-row items-center hover:scale-110 cursor-pointer">
+                                <AtSignIcon className="size-6 mr-5"></AtSignIcon>
+                                SIGN IN VIA EMAIL
+                            </Link>
+                            <div className="flex flex-row items-center hover:scale-110 cursor-pointer">
+                                <Wallet2Icon className="size-6 mr-5"></Wallet2Icon>
+                                CONNECT VIA WALLET
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    )
+}import { Inconsolata } from "next/font/google";
+import "./globals.css";
+
+const inconsolata = Inconsolata({
+  variable: "--font-inconsolata",
+  subsets: ["latin"],
+});
+
+// testing github
+
+export const metadata = {
+  title: "ZK-Bluff",
+  description: "Bluff game with no cheating",
+};
+
+export default function Layout({ children }) {
+  return (
+    <html className={inconsolata.className}>
+      <body className="relative w-screen h-screen overflow-hidden">{children}</body>
+    </html>
+  )
+}
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { encodeGameState, decodeGameState } from '@/lib/xor';
+
+export default function offline() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+
+    const [joker, setJoker] = useState(false);
+    const [aiPlayer, setAiPlayer] = useState(false);
+    const [settings, setSettings] = useState(false);
+
+    const [players, setPlayerNum] = useState(3);
+    const [popup, setPopup] = useState(false);
+    const [winPopup, setWinPopup] = useState(false);
+    const [winConst, setWinConst] = useState(false);
+    const [winScreen, setWinScreen] = useState(false);
+    const [playerNames, setPlayerNames] = useState(["Player 1", "Player 2", "Player 3", "Player 4", "Player 5", "Player 6", "Player 7", "Player 8"]);
+    const [tempName, setTempName] = useState("");
+    const [index, setIndex] = useState(0);
+
+    const [savedGameState, setSavedGameState] = useState(null);
+    
+    const [bsResultPopup, setBsResultPopup] = useState(null); 
+    const [bsResultPopupConditional, setBsResultPopupConditional] = useState(false); 
+    const [blameModalOpen, setBlameModalOpen] = useState(false);
+
+    const popupOpener = () => {
+        setPopup(true);
+    }
+
+    useEffect(() => {
+        const data = searchParams.get("data");
+        if (data) {
+            const decrypted = decodeGameState(data);
+            if (decrypted) {
+                setPlayerNames(decrypted.names);
+                setPlayerNum(decrypted.count);
+                setSavedGameState(decrypted);
+            }
+        }
+    }, [searchParams]);
+
+    const setSettingsFunc = () => {
+        setSettings(true);
+    }
+
+    const setSettingsBackFunc = () => {
+        setSettings(false);
+    }
+
+    const addJokers = () => {
+        setJoker(true);
+    }
+
+    const removeJokers = () => {
+        setJoker(false);
+    }
+
+    const addAi = () => {
+        setAiPlayer(true);
+    }
+
+    const removeAi = () => {
+        setAiPlayer(false);
+    }
+
+    const uiChange = () => {
+        const num = index;
+        const name = tempName;
+        if (name != "")
+            {setPlayerNames(prev =>
+                prev.map((names, i) => (i === num - 1 ? name : names))
+            );}
+        setTempName("");
+        setPopup(false);
+    }
+
+    const cancelName = () => {
+        setPopup(false);
+    }
+
+    const changeName = (num) => {
+        setIndex(num);
+        setTempName(playerNames[num - 1])
+        popupOpener();
+    }
+
+    const addPlayer = () => {
+        if (aiPlayer && players < 7) setPlayerNum(players + 1);
+        else if (!(aiPlayer) && players < 8) setPlayerNum(players + 1);
+    };
+
+    const removePlayer = () => {
+        if (players > 3) setPlayerNum(players - 1);
+    };
+
+    const getLastClaimText = () => {
+        if (!savedGameState || !savedGameState.lastClaim) return null;
+        const claim = savedGameState.lastClaim;
+        
+        // If array (standard play): [playerIdx, count, rank]
+        if (Array.isArray(claim)) {
+            const idx = claim[0];
+            const name = playerNames[idx] || `Player ${idx + 1}`;
+            return `${name} claimed: ${claim[1]} ${claim[2]}(s)`.toUpperCase();
+        }
+        // If string (penalty message):
+        return claim;
+    };
+
+    const getNextPlayerID = () => {
+        if (!savedGameState || !savedGameState.lastClaim) return null;
+        const claim = savedGameState.lastClaim;
+        if (Array.isArray(claim)) {
+        const idx = claim[0];
+        if (idx + 1 === savedGameState.names.length){
+            return 0;
+        }
+        return idx + 1;
+        }
+    };
+
+    // --- LOGIC: PROCESS BS CLAIM ---
+    const onClaimBS = () => {
+        const claimData = savedGameState?.lastClaim
+        const actualClaimData = savedGameState?.actualClaim
+
+        if (Array.isArray(claimData) && claimData.length === 3) {
+            const [claimerNumber, cardClaimCount, cardClaimRank] = claimData;
+            const claimerName = playerNames[claimerNumber];
+            
+            // Logic to check if truthful
+            let wasTruthful = true;
+            let tally = 0;
+            for (let index = 0; index < actualClaimData.length; index++) {
+                const element = actualClaimData[index];
+                if (element.rank == cardClaimRank || element.rank == "Joker") {
+                    tally++;
+                } else {
+                    wasTruthful = false;
+                }
+            }
+            if (wasTruthful) wasTruthful = tally === cardClaimCount;
+
+            if (wasTruthful) {
+                if (savedGameState.allHands[savedGameState.nextIndex - 1].length === 0){
+                    setWinPopup(false);
+                    setWinScreen(true);
+                } else {
+                    setBsResultPopup({
+                        message: `${claimerName} was NOT bluffing!`,
+                        sub: "Who called BS? They must pick up the pile.",
+                        type: 'neutral'
+                    });
+                    setBlameModalOpen(true);
+                }
+            }
+            else {
+                setBsResultPopup({
+                    message: `${claimerName} WAS bluffing!`,
+                    sub: "They must pick up the discard pile.",
+                    type: 'good',
+                    onConfirm: () => applyPenalty(claimerNumber, `${claimerName} BS'ed! Picked up`)
+                });
+
+                // wait for confirmation
+                setBsResultPopupConditional(true);
+            }
+        }
+    }
+
+    const handleBlameSelect = (blamerIndex) => {
+        const blamerName = playerNames[blamerIndex];
+        const claimerIndex = savedGameState.lastClaim[0];
+        const claimerName = playerNames[claimerIndex];
+        
+        setBsResultPopup({
+            message: `${claimerName} TOLD THE TRUTH!`,
+            sub: `${blamerName} receives the punishment.`,
+            type: 'bad',
+            onConfirm: () => applyPenalty(blamerIndex, `${claimerName} was honest! ${blamerName} picked up`)
+        });
+        
+        // wait for confirmation
+        setBsResultPopupConditional(true);
+    }
+
+    const applyPenalty = (victimIndex, messagePrefix) => {
+        if (!savedGameState) return;
+
+        const pile = savedGameState.discardPile || [];
+        const newAllHands = [...savedGameState.allHands];
+        
+        newAllHands[victimIndex] = [...newAllHands[victimIndex], ...pile];
+
+        const newState = {
+            ...savedGameState,
+            allHands: newAllHands,
+            discardPile: [], 
+            centerCard: null, 
+            lastClaim: `${messagePrefix} ${pile.length} cards.`, 
+            names: playerNames,
+            ai: aiPlayer,
+        };
+
+        const encryptedData = encodeGameState(newState);
+        const params = new URLSearchParams();
+        params.set("data", encryptedData);
+        if (joker == true)  {
+            router.push(`/devgame-jokergame?${params.toString()}`);
+        }
+        else if (aiPlayer == true) {
+            router.push(`/devgame-ai?${params.toString()}`);
+        }
+        else {router.push(`/devgame?${params.toString()}`);}
+    }
+
+    const onStartGame = () => {
+        let activePlayerNames = playerNames.slice(0, players);
+        let gameState = {};
+        if (aiPlayer) {
+            activePlayerNames[players] = "AI Player";
+            gameState = {
+                count: players+1,
+                nextIndex: 0,
+                allHands: "", 
+                centerCard: "",
+                lastClaim: "",
+                actualClaim: "",
+                names: activePlayerNames,
+                discardPile: [],
+                ai: 1,
+            };
+        }
+        else {        
+            gameState = {
+                count: players,
+                nextIndex: 0,
+                allHands: "", 
+                centerCard: "",
+                lastClaim: "",
+                actualClaim: "",
+                names: activePlayerNames,
+                discardPile: [],
+                ai: 0,
+            };
+        }
+
+        if (savedGameState && savedGameState.allHands && savedGameState.count === players) {
+            gameState = {
+                ...savedGameState,
+                names: activePlayerNames 
+            };
+        }
+
+        const encryptedData = encodeGameState(gameState);
+        const params = new URLSearchParams();
+        params.set("data", encryptedData);
+        if (joker == true)  {
+            router.push(`/devgame-jokergame?${params.toString()}`);
+        }
+        else if (aiPlayer == true) {
+            router.push(`/devgame-ai?${params.toString()}`);
+        }
+        else {router.push(`/devgame?${params.toString()}`);}
+
+    };
+
+    const setWinFunc = () => {
+        if (winPopup === false){
+        setWinPopup(true);}
+    }
+
+    useEffect(() => {if (savedGameState !== null && winConst === false){
+                    if (savedGameState.allHands[savedGameState.nextIndex -1] !== undefined)
+                        {if (savedGameState.allHands[savedGameState.nextIndex - 1].length === 0){
+                            setWinConst(true);
+                            setWinFunc();
+                            }}   
+                        }}, [savedGameState, winPopup])
+
+    return (
+        <div className="flex min-h-screen items-center justify-center overflow-auto bg-linear-to-tl bg-radial from-[#BA2237] from-30% to-[#261447] select-none relative">
+            
+            {settings && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                <div className="bg-white/40 outline-4 outline-white p-8 rounded-2xl text-center max-w-lg flex flex-col items-center space-y-10">
+                    <h1 className="text-5xl text-white font-bold">SETTINGS</h1>
+                    <div className="flex flex-row space-x-5 items-center justify-between w-[200]">
+                        <label className="text-white font-bold text-sm md:text-xl ml-1">ADD AI</label>
+                        <input type="checkbox" defaultChecked={aiPlayer} onClick={(e) => {if (e.target.checked) {addAi()} else {removeAi()}}} className="cursor-pointer size-5 border-2 border-white accent-[#F30000]/60 checked:text-white"></input>
+                    </div>
+                    <div className="flex flex-row space-x-5 items-center justify-between w-[200]">
+                        <label className="text-white font-bold text-sm md:text-xl ml-1">ADD JOKER</label>
+                        <input type="checkbox" defaultChecked={joker} onClick={(e) => {if (e.target.checked) {addJokers()} else {removeJokers()}}} className="cursor-pointer size-5 border-2 border-white accent-[#F30000]/60 checked:text-white"></input>
+                    </div>
+                    <button onClick={setSettingsBackFunc} className="cursor-pointer text-white text-2xl p-2 font-bold bg-[#F30000]/60 rounded-xl ">BACK BUTTON</button>
+                    </div>
+                </div>}
+
+            {/* BS RESULT POPUP */}
+            {bsResultPopupConditional && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                    <div className="bg-white p-8 rounded-2xl text-center max-w-lg flex flex-col items-center gap-4">
+                        <h2 className="text-4xl font-extrabold text-black mb-2">{bsResultPopup.message}</h2>
+                        <p className="text-xl text-gray-700 font-bold mb-4">{bsResultPopup.sub}</p>
+                        
+                        <button 
+                            onClick={() => {
+                                if (bsResultPopup.onConfirm) bsResultPopup.onConfirm();
+                                setBsResultPopupConditional(false);
+                            }}
+                            className="bg-black text-white font-bold py-3 px-8 rounded-xl text-xl hover:scale-105 transition-transform"
+                        >
+                            CONTINUE
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* BLAME SELECTOR MODAL */}
+            {blameModalOpen && (
+                <div className="fixed inset-0 z-30 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
+                    <h2 className="text-white text-3xl font-bold mb-8">WHO CALLED BS?</h2>
+                    <div className="flex flex-wrap gap-4 justify-center max-w-4xl">
+                        {playerNames.slice(0, players).map((name, i) => {
+                            if (savedGameState && savedGameState.lastClaim && i === savedGameState.lastClaim[0]) return null;
+                            
+                            return (
+                                <button 
+                                    key={i}
+                                    onClick={() => {
+                                        if (bsResultPopup?.type !== "good") {
+                                            handleBlameSelect(i);
+                                            setBlameModalOpen(false);
+                                        } else {
+                                            setBsResultPopupConditional(true);
+                                        }
+                                    }}
+                                    className="bg-red-600 hover:bg-red-500 text-white font-bold py-4 px-8 rounded-xl text-2xl transition-transform hover:scale-110 cursor-pointer"
+                                >
+                                    {name}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* NAME EDIT POPUP */}
+            {popup && <div className="m-25 absolute w-[300] h-[200] md:w-[800] md:h-[400] bg-black/40 z-30 flex flex-col justify-center items-center space-y-5 md:space-y-20 rounded-2xl">
+                <h1 className="text-white text-2xl md:text-5xl text-center font-extrabold">ENTER PLAYER {index}'S NAME: </h1>
+                <input className="p-4 rounded-xl bg-white/10 border border-white/20 text-white text-xl focus:outline-4 outline-white focus:border-white w-[125] h-[25] md:w-[250] md:h-[50] md:text-3xl text-center font-bold" placeholder="ENTER NAME" onChange={(e) => setTempName(e.target.value)} value={"" || tempName}>
+                </input>
+                <div className="flex flex-row space-x-5">
+                    <button onClick={uiChange} className="disabled:cursor-not-allowed h-[30] w-[75] md:w-[150] md:h-[50] justify-center items-center flex text-white text-xl md:text-4xl font-bold rounded-lg md:rounded-2xl bg-[#F30000]/60 cursor-pointer">
+                        SUBMIT
+                    </button>
+                    <button onClick={cancelName} className="disabled:cursor-not-allowed h-[30] w-[75] md:w-[150] md:h-[50] justify-center items-center flex text-white text-xl md:text-4xl font-bold rounded-lg md:rounded-2xl bg-[#F30000]/60 cursor-pointer">
+                        CANCEL
+                    </button>
+                </div>
+            </div>}
+
+            {winPopup && <div className="m-25 absolute w-[300] h-[200] md:w-[800] md:h-[400] bg-black/60 z-30 flex flex-col text-center items-center space-y-5 rounded-2xl">
+                <h1 className="text-white text-2xl md:text-5xl text-center font-extrabold mt-5 w-full flex items-center justify-center">DO YOU THINK</h1>
+                <h2 className="text-red-600 text-2xl md:text-4xl text-center font-extrabold mt-5 w-full flex items-center justify-center">{playerNames[savedGameState.nextIndex - 1].toUpperCase()}</h2>
+                <h2 className="text-white text-2xl md:text-4xl text-center font-extrabold mt-5 w-full flex items-center justify-center">IS SAYING BS?</h2>
+                <div className="flex flex-row text-white space-x-5">
+                <button onClick={onClaimBS} className="w-[300] h-[50] bg-[#F30000]/60 rounded-xl text-4xl font-bold">CLAIM BS</button>
+                <button onClick={() => {setWinScreen(true); setWinPopup(false)}} className="w-[300] h-[50] bg-[#F30000]/60 rounded-xl text-4xl font-bold">TELLING TRUTH</button>
+                </div>
+            </div>}
+
+            {winScreen && <div onClick={() => router.push(`/game-mode`)} className="m-25 absolute w-[300] h-[200] md:w-[800] md:h-[400] bg-black/60 z-30 flex flex-col text-center justify-center items-center space-y-5 rounded-2xl">
+                <h1 className="text-white text-2xl md:text-5xl text-center font-extrabold mt-5 w-full flex items-center justify-center">WINNER!</h1>
+                <h2 className="text-red-600 text-2xl md:text-4xl text-center font-extrabold mt-5 w-full flex items-center justify-center">{playerNames[savedGameState.nextIndex - 1].toUpperCase()}</h2>
+                <h2 className="text-white text-2xl md:text-4xl text-center font-extrabold mt-5 w-full flex items-center justify-center">WON!</h2>
+            </div>}
+            
+            <main className={`min-w-[300] md:min-w-[1100] flex flex-col justify-center items-center p-5 rounded-2xl bg-black/30 sm:items-start z-10 ${popup || winPopup || winScreen ? "blur" : "bg-black/30"}`}>
+
+                <div className={`${!(savedGameState && players === savedGameState.count) ? "grid grid-cols-3" : "flex"} w-full items-center`}>
+                    <div className="flex md:flex-row flex-col md:space-x-5 md:space-y-0 space-y-2 justify-start">
+                        {!(savedGameState && players === savedGameState.count) &&<div className="shadow-2xl hover:cursor-pointer hover:scale-110 w-[90] h-[30] md:w-[160] md:h-[50] bg-[#F30000]/60 rounded-xl p text-white items-center justify-center flex font-bold text-xs md:text-xl" onClick={addPlayer}>
+                            ADD PLAYER
+                        </div>}
+                        {!(savedGameState && players === savedGameState.count) &&<div className="shadow-2xl hover:cursor-pointer hover:scale-110 w-[90] h-[30] md:w-[160] md:h-[50] bg-[#F30000]/60 rounded-xl p text-white items-center justify-center flex font-bold text-xs md:text-xl" onClick={removePlayer}>
+                            REMOVE PLAYER
+                        </div>}
+                    </div>
+                    
+                    <div className="flex flex-row grow items-center justify-center space-x-5">
+                        {/* LAST CLAIM DISPLAY */}
+                        {savedGameState && players === savedGameState.count && (
+                             <div className="mb-2 px-6 py-2 rounded-lg bg-black/20 border border-white/10">
+                                <h2 className="text-blue-500 font-bold text-xl md:text-xl text-center">
+                                    {getLastClaimText()}
+                                </h2>
+                             </div>
+                        )}
+
+                        {!(savedGameState && players === savedGameState.count) &&<h1 className="text-white text-xl md:text-5xl font-bold items-center flex justify-center">
+                            GAME SETUP:
+                        </h1>}
+                    </div>
+
+                    <div className={`flex ${!(savedGameState && players === savedGameState.count) ? "justify-end" : "justify-center items-center w-full"} md:mr-5 space-x-3`}>
+                        {!(savedGameState && players === savedGameState.count) && <div onClick={setSettingsFunc} className="shadow-2xl hover:cursor-pointer hover:scale-110 w-[90] h-[30] text-xs md:text-2xl md:w-[160] md:h-[50] bg-[#F30000]/60 rounded-xl p-2 text-white items-center justify-center flex font-bold">
+                            SETTINGS
+                        </div>}
+                        <div className={`shadow-2xl hover:cursor-pointer hover:scale-110 ${!(savedGameState && players === savedGameState.count) ? "w-[90] h-[30] text-xs md:text-2xl md:w-[160] md:h-[50]" : "w-[90] h-[30] text-xs md:w-[160] md:h-[50] md:text-4xl"} bg-[#F30000]/60 rounded-xl p-2 text-white items-center justify-center flex font-bold`} onClick={onStartGame}>
+                            {savedGameState && players === savedGameState.count ? "RESUME" : "START GAME"}
+                        </div>
+                        {(savedGameState && players === savedGameState.count) && <div className={`ml-4 shadow-2xl hover:cursor-pointer hover:scale-110 ${!(savedGameState && players === savedGameState.count) ? "w-[90] h-[30] text-xs md:text-2xl md:w-[160] md:h-[50]" : "w-[90] h-[30] text-xs md:w-[160] md:h-[50] md:text-4xl"} bg-blue-900 rounded-xl p-2 text-white items-center justify-center flex font-bold`} onClick={onClaimBS}>
+                            CLAIM BS
+                        </div>}
+                    </div>
+                </div>
+
+                <div className="flex flex-col md:flex-row space-y-5 md:space-x-5 mt-5">
+                     <div className="flex md:flex-col flex-row space-x-5 md:space-x-0 md:space-y-5">
+                        <div className={`hover:cursor-pointer hover:scale-105 w-[125] h-[100] md:w-[250] md:h-[200] bg-[#F30000]/60 rounded-2xl text-white flex flex-col justify-center items-center font-bold text-2xl ${getNextPlayerID() === 0 ? "outline-4 outline-red-500":""}`} onClick={() => (savedGameState && players === savedGameState.count) ? undefined : changeName(1)}>
+                            {playerNames[0]}
+                            <p className="text-xl text-white/70">Host</p>
+                        </div>
+                        <div className={`hover:cursor-pointer hover:scale-105 w-[125] h-[100] md:w-[250] md:h-[200] bg-[#F30000]/60 rounded-2xl text-white flex justify-center items-center font-bold text-2xl ${getNextPlayerID() === 1 ? "outline-4 outline-red-500":""}`} onClick={() => (savedGameState && players === savedGameState.count) ? undefined : changeName(2)}>
+                            {playerNames[1]}
+                        </div>
+                    </div>
+                    <div className="flex md:flex-col flex-row space-x-5 md:space-x-0 md:space-y-5">
+                        <div className={`hover:cursor-pointer hover:scale-105 w-[125] h-[100] md:w-[250] md:h-[200] bg-[#F30000]/60 rounded-2xl text-white flex justify-center items-center font-bold text-2xl ${getNextPlayerID() === 2 ? "outline-4 outline-red-500":""}`} onClick={() => (savedGameState && players === savedGameState.count) ? undefined : changeName(3)}>
+                            {playerNames[2]}
+                        </div>
+                        {players >= 4 && <div className={`hover:cursor-pointer hover:scale-105 w-[125] h-[100] md:w-[250] md:h-[200] bg-[#F30000]/60 rounded-2xl text-white flex justify-center items-center font-bold text-2xl ${getNextPlayerID() === 3 ? "outline-4 outline-red-500":""}`} onClick={() => (savedGameState && players === savedGameState.count) ? undefined : changeName(4)}>
+                            {playerNames[3]}
+                        </div>}
+                    </div>
+                    <div className="flex md:flex-col flex-row space-x-5 md:space-x-0 md:space-y-5">
+                        {players >= 5 && <div className={`hover:cursor-pointer hover:scale-105 w-[125] h-[100] md:w-[250] md:h-[200] bg-[#F30000]/60 rounded-2xl text-white flex justify-center items-center font-bold text-2xl ${getNextPlayerID() === 4 ? "outline-4 outline-red-500":""}`} onClick={() => (savedGameState && players === savedGameState.count) ? undefined : changeName(5)}>
+                            {playerNames[4]}
+                        </div>}
+                        {players >= 6 && <div className={`hover:cursor-pointer hover:scale-105 w-[125] h-[100] md:w-[250] md:h-[200] bg-[#F30000]/60 rounded-2xl text-white flex justify-center items-center font-bold text-2xl ${getNextPlayerID() === 5 ? "outline-4 outline-red-500":""}`} onClick={() => (savedGameState && players === savedGameState.count) ? undefined : changeName(6)}>
+                            {playerNames[5]}
+                        </div>}
+                    </div>
+                    <div className="flex md:flex-col flex-row space-x-5 md:space-x-0 md:space-y-5">
+                        {players >= 7 && <div className={`hover:cursor-pointer hover:scale-105 w-[125] h-[100] md:w-[250] md:h-[200] bg-[#F30000]/60 rounded-2xl text-white flex justify-center items-center font-bold text-2xl ${getNextPlayerID() === 6 ? "outline-4 outline-red-500":""}`} onClick={() => (savedGameState && players === savedGameState.count) ? undefined : changeName(7)}>
+                            {playerNames[6]}
+                        </div>}
+                        {(!(aiPlayer) && players >= 8) && <div className={`hover:cursor-pointer hover:scale-105 w-[125] h-[100] md:w-[250] md:h-[200] bg-[#F30000]/60 rounded-2xl text-white flex justify-center items-center font-bold text-2xl ${getNextPlayerID() === 7 ? "outline-4 outline-red-500":""}`} onClick={() => (savedGameState && players === savedGameState.count) ? undefined : changeName(8)}>
+                            {playerNames[7]}
+                        </div>}
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+}import { JoystickIcon, MegaphoneIcon, NotepadTextIcon } from 'lucide-react';
+import Navigation from '@/components/ui/nav';
+
+export default function howto() {
+  return (
+    <main className="flex flex-col relative h-full w-full overflow-auto sm:overflow-hidden bg-radial from-[#BA2237] from-30% to-[#261447] select-none">
+        <Navigation></Navigation>
+        <div className="flex justify-center items-center">
+            <h1 className="text-4xl lg:text-7xl font-bold text-white">
+                HOW TO PLAY:
+            </h1>
+        </div>
+        <div className="flex justify-center items-center mt-10 flex-col sm:flex-row">
+            <h3 className="text-xl sm:text-3xl font-bold text-white">
+                OBJECTIVE: 
+            </h3>
+            <p className="ml-5 text-xs sm:text-2xl text-white">
+                Be the first player to get rid of all your cards.
+            </p>
+        </div>
+        <div className="flex-col sm:flex-row flex justify-center items-center space-y-10 p-5 sm:space-y-0 sm:space-x-10 mt-10 text-white">
+            <div className="w-[300] h-[350] items-center flex flex-col bg-black/20 shadow-2xl p-5 rounded-2xl">
+                <div className="bg-[#F30000]/40 rounded-2xl p-2">
+                    <JoystickIcon className="w-[50] h-[50]">
+                    </JoystickIcon>
+                </div>
+                    <h4 className="text-2xl font-bold mt-2">
+                        PLAYING CARDS:
+                    </h4>
+                <div className="flex justify-center h-full items-center flex-col">
+                    <div className="text-start mt-2 ml-2">
+                        <li>
+                            Cards must be placed in an ascending order (e.g. 1,2,3).
+                        </li>
+                        <li>
+                            You can only place one or multiple cards at a time.
+                        </li>
+                        <li>
+                            Cards must have the same rank when placing multiple cards.
+                        </li>
+                    </div>
+                </div>
+            </div>
+            <div className="w-[300] h-[350] items-center flex flex-col bg-black/20 shadow-2xl p-5 rounded-2xl">
+                <div className="bg-[#F30000]/40 rounded-2xl p-2">
+                    <MegaphoneIcon className="w-[50] h-[50]">
+                    </MegaphoneIcon>
+                </div>
+                    <h4 className="text-2xl font-bold mt-2">
+                        CALLING BS:
+                    </h4>
+                <div className="flex justify-center h-full items-center flex-col">
+                    <div className="text-start mt-2 ml-2">
+                        <li>
+                            You can only call BS after the card has been placed.
+                        </li>
+                        <li>
+                            If a player is caught lying, they must pick up the pile.
+                        </li>
+                        <li>
+                            If the accused is not lying, the accuser must pick up the pile.
+                        </li>
+                    </div>
+                </div>
+            </div>
+            <div className="w-[300] h-[350] items-center flex flex-col bg-black/20 shadow-2xl p-5 rounded-2xl">
+                <div className="bg-[#F30000]/40 rounded-2xl p-2">
+                    <NotepadTextIcon className="w-[50] h-[50]">
+                    </NotepadTextIcon>
+                </div>
+                    <h4 className="text-2xl font-bold mt-2">
+                        OTHER RULES:
+                    </h4>
+                <div className="flex justify-center h-full items-center flex-col">
+                    <div className="text-start mt-2 ml-2">
+                        <li>
+                            The Joker can be played as any cards in the deck.   
+                        </li>
+                        <li>
+                            Can't play a valid card(s)? Just Bluff (BS) and don't get caught!
+                        </li>
+                        <li>
+                            Don't want to lie? Just skip your turn!
+                        </li>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+  );
+}"use client";
+import Link from "next/link";
+import Navigation from "@/components/ui/navigation";
+import BubbleBackground from "@/components/ui/bubble-background";
+import { CircleQuestionMarkIcon, MoveRightIcon } from 'lucide-react';
+
+export default function Home() {
+  return (
+
+      <main className="flex flex-col relative h-full overflow-hidden bg-transparent select-none">
+        {/* previous background before initial change*/}
+        {/* min-w-screen bg-linear-to-tl/increasing from-[#0F6987] to-[#604ce0] */}
+        <div className="absolute inset-0 z-0">
+          <BubbleBackground/>
+        </div>
+          <Navigation>
+          </Navigation>
+        <div className="relative z-10 w-screen h-screen flex flex-col justify-center items-center grow text-center">
+          <h1 className="pb-5 font-bold text-4xl sm:text-6xl lg:text-7xl text-white">
+            WELCOME TO ZK-BLUFF
+          </h1>
+          <h2 className="pb-10 font-semibold text-xs sm:text-xl md:text-3xl text-gray-100">
+            Immerse yourself to an anti-cheating bluff game
+          </h2>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center text-white">
+              <Link href="/game-rules" className="flex p-3 font-bold text-lg sm:text-2xl bg-[#F30000]/60 mx-10 rounded-3xl hover:scale-110">
+                <CircleQuestionMarkIcon className="mr-2 size-6 md:size-8"></CircleQuestionMarkIcon>
+                How To Play
+              </Link>
+              <Link href="/game-mode" className="flex items-center justify-center p-2 font-bold text-lg sm:text-2xl mx-10 hover:scale-110">
+                Create Game
+                <MoveRightIcon className="ml-3 size-6 md:size-8"></MoveRightIcon>
+              </Link> 
+            </div>
+          </div>
+      </main>
+  );
+}import BubbleBackground from "@/components/ui/bubble-background";
+import { CircleArrowLeftIcon } from "lucide-react";
+import Link from "next/link";
+
+export default function offline() {
+    return (
+        <main className="flex flex-col relative h-full overflow-hidden bg-transparent select-none">
+            <div className="absolute inset-0 z-0">
+            <BubbleBackground/>
+            </div>
+            <div className="relative z-10 w-screen h-screen flex flex-col justify-center items-center">
+                <div className="w-[400] h-[400] md:w-[600] md:h-[600] flex flex-col z-30 bg-black/50 rounded-2xl space-y-5 md:space-y-10">
+                    <div className="flex justify-center items-center space-x-5 flex-row mt-5">
+                    <Link href="/choose-sign-in" className="hover:scale-110">
+                    <CircleArrowLeftIcon className="flex justify-center items-center text-white size-15"></CircleArrowLeftIcon>
+                    </Link>
+                    <h1 className="text-7xl text-white font-bold flex justify-center">SIGN IN:</h1>
+                    </div>
+                    <h3 className="text-white font-bold text-2xl md:text-5xl md:ml-20">Email Address:</h3>
+                    <div className="flex justify-center">
+                        <input type="email" className="outline-white w-[450] h-[25] md:h-[50] md:flex md:justify-center border-white border-4 rounded-lg hover:border-white placeholder:text-center text-white font-bold text-xl md:text-3xl" placeholder="Enter Email Address">
+                        </input>
+                    </div>
+                    <h3 className="text-white font-bold text-2xl md:text-5xl md:ml-20">Password:</h3>
+                    <div className="flex justify-center">
+                        <input type="password" className="outline-white w-[450] h-[25] md:h-[50] md:flex md:justify-center border-white border-4 rounded-lg hover:border-white placeholder:text-center text-white font-bold text-xl md:text-3xl" placeholder="Enter Password">
+                        </input>
+                    </div>
+                    <div className="flex justify-center items-center flex-col space-y-2">
+                        <button className="mt-5 w-[200] h-[30] md:h-[50] flex justify-center items-center rounded-xl bg-[#F30000]/60 text-white text-2xl md:text-5xl font-bold">
+                            SUBMIT
+                        </button>
+                        <Link href="/choose-sign-in" className="underline text-blue-800 font-bold hover:text-blue-600">
+                            Create Account
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        </main>
+    )
+}"use client";
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { subscribeToGame, joinGameRoom, startGame, uploadHandCommitment } from "@/lib/firebase-game";
+import { generateHandCommitment } from "@/lib/zk";
+import { CrownIcon, UserIcon } from "lucide-react";
+
+export default function Lobby() {
+    const { code } = useParams();
+    const router = useRouter();
+    const [gameData, setGameData] = useState(null);
+    const [userId, setUserId] = useState(null);
+
+    useEffect(() => {
+        // 1. Try to get the existing ID from storage first
+        let storedId = localStorage.getItem("zk_user_id");
+
+        // 2. Only generate a new one if it doesn't exist
+        if (!storedId) {
+            storedId = "user_" + Math.random().toString(36).substring(2,9);
+            localStorage.setItem("zk_user_id", storedId);
+        }
+        
+        setUserId(storedId);
+
+        // 3. Join with the consistent ID
+        const name = localStorage.getItem("zk_user_name") || "Guest";
+        joinGameRoom(code, name, storedId);
+    }, [code]);
+
+    // 2. Subscribe to Firebase Updates
+    useEffect(() => {
+        const unsubscribe = subscribeToGame(code, async (data) => {
+            setGameData(data);
+            if (data.status === "playing") {
+                // When game starts, capture our hand locally, compute Poseidon commitment, upload it.
+                try {
+                    const storedId = localStorage.getItem("zk_user_id");
+                    const me = data.players.find(p => p.id === storedId);
+                    if (me) {
+                        const myHand = me.hand || [];
+                        // Generate salt if not present
+                        let salt = localStorage.getItem('my_salt');
+                        if (!salt) {
+                            salt = Math.floor(Math.random()*1e9).toString();
+                            localStorage.setItem('my_salt', salt);
+                        }
+
+                        // Map cards to integers: suitIndex * 13 + rankIndex. Jokers -> 52/53
+                        const suitOrder = { hearts:0, diamonds:1, clubs:2, spades:3, joker:4 };
+                        const rankOrder = { A:0, "2":1, "3":2, "4":3, "5":4, "6":5, "7":6, "8":7, "9":8, "10":9, J:10, Q:11, K:12, Joker:13 };
+                        const cardInts = myHand.map(c => {
+                            const s = suitOrder[c.suit] ?? 4;
+                            const r = rankOrder[c.rank] ?? 13;
+                            if (s === 4) return 52 + (r === 13 ? 1 : 0);
+                            return s * 13 + r;
+                        });
+
+                        // Save full hand locally and compute commitment
+                        localStorage.setItem('my_hand', JSON.stringify(myHand));
+                        try {
+                            const commitment = await generateHandCommitment(cardInts, salt);
+                            // Signal we've locally saved the hand, and upload commitment to Firestore
+                            await uploadHandCommitment(code, storedId, commitment, { localSaved: true });
+
+                            // If we're the host, check if everyone committed+saved; if so, finalize after short delay
+                            const gameRef = await fetch(`/api/gameStatus?code=${code}`).then(r => r.json()).catch(() => null);
+                            if (gameRef && gameRef.hostId === storedId) {
+                                const allCommitted = (gameRef.players || []).every(p => p.handCommitment && p.localSaved);
+                                if (allCommitted) {
+                                    // Small delay to allow last client-side writes to settle
+                                    setTimeout(() => {
+                                        fetch(`/api/finalizeCommitments?code=${code}`, { method: 'POST' }).catch(e => console.warn(e));
+                                    }, 1000);
+                                }
+                            }
+                        } catch (err) {
+                            console.warn('commit upload failed', err);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('hand commitment error', e);
+                }
+
+                router.push(`/online/game/${code}`);
+            }
+        });
+        return () => unsubscribe && unsubscribe();
+    }, [code, router]);
+
+    if (!gameData) return <div className="text-white text-center mt-20">Loading Game Room...</div>;
+
+    const isHost = gameData.hostId === userId;
+
+    return (
+        <div className="flex min-h-screen flex-col items-center p-10 bg-radial from-[#BA2237] to-[#261447] select-none">
+            <h1 className="text-white text-4xl md:text-6xl font-bold mb-4">GAME ROOM CODE: <span className="text-red-500">{code}</span></h1>
+            
+            <div className="w-full max-w-2xl bg-black/40 rounded-xl p-8 backdrop-blur-md">
+                <h2 className="text-white text-2xl font-bold mb-6 flex items-center justify-center w-full">
+                    <UserIcon className="mr-2"/> PLAYERS ({gameData.players.length})
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {gameData.players.map((p, i) => (
+                        <div key={p.id} className="flex items-center bg-white/10 p-4 rounded-lg text-white font-bold text-xl">
+                            {p.id === gameData.hostId && <CrownIcon className="text-blue-400 mr-3 size-6"/>}
+                            {p.name} {p.id === userId && "(You)"}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="mt-10 flex justify-center">
+                    {isHost ? (
+                        <button 
+                            disabled={gameData.players.length < 3}
+                            onClick={() => startGame(code)}
+                            className="bg-[#F30000] hover:bg-red-600 text-white text-3xl font-bold py-4 px-12 rounded-2xl shadow-xl transition-transform hover:scale-105 cursor-pointer disabled:cursor-not-allowed"
+                        >
+                            START GAME
+                        </button>
+                    ) : (
+                        <div className="text-white/70 text-2xl font-bold animate-pulse">
+                            WAITING FOR HOST TO START...
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}"use client";
+
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { subscribeToGame, playTurn, callBS, voteTruth } from "@/lib/firebase-game"; // Changed confirmWin to voteTruth
+import * as snarkjs from "snarkjs";
+import Card from "@/components/card";
+
+export default function OnlineGame() {
+    const { code } = useParams();
+    const router = useRouter();
+    const [game, setGame] = useState(null);
+    const [userId, setUserId] = useState(null);
+    const [selectedIndices, setSelectedIndices] = useState([]);
+    const [isDeclaring, setIsDeclaring] = useState(false);
+    const [bsValue, setBsValue] = useState(20);
+
+    useEffect(() => {
+        setUserId(localStorage.getItem("zk_user_id"));
+        const unsubscribe = subscribeToGame(code, (data) => {
+            setGame(data);
+        });
+        return () => unsubscribe && unsubscribe();
+    }, [code]);
+
+    if (!game || !game.gameState) return <div className="text-white p-10">Loading Game State...</div>;
+
+    const { players, gameState } = game;
+    const myPlayerIndex = players.findIndex(p => p.id === userId);
+    let myHand = players[myPlayerIndex]?.hand || [];
+    try {
+        const stored = localStorage.getItem('my_hand');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (players[myPlayerIndex] && players[myPlayerIndex].id === userId) {
+                myHand = parsed;
+            }
+        }
+    } catch (e) {
+        // ignore parse errors and fallback to server hand
+    }
+    const isMyTurn = gameState.turnIndex === myPlayerIndex;
+    const targetRank = gameState.targetRank;
+    const lastClaim = gameState.lastClaim;
+    
+    // Win State Helpers
+    const isWinPending = gameState.winPending;
+    const potentialWinnerName = isWinPending 
+        ? players.find(p => p.id === gameState.potentialWinnerId)?.name 
+        : "";
+    const isGameFinished = game.status === "finished";
+    const winnerName = isGameFinished 
+        ? players.find(p => p.id === gameState.winnerId)?.name 
+        : "";
+
+    // Vote Counting
+    const currentVotes = gameState.truthVotes || [];
+    const hasVoted = currentVotes.includes(userId);
+    const totalPlayers = players.length;
+    const votesNeeded = totalPlayers - 1;
+    const votesCount = currentVotes.length;
+
+    // --- HANDLERS ---
+
+    const toggleSelect = (idx) => {
+        if (!isMyTurn) return;
+        if (selectedIndices.includes(idx)) setSelectedIndices(selectedIndices.filter(i => i !== idx));
+        else setSelectedIndices([...selectedIndices, idx]);
+    };
+
+    const handlePlay = async () => {
+        if (selectedIndices.length === 0) return;
+        setIsDeclaring(true);
+    };
+
+    const confirmPlay = async (rankToClaim) => {
+        // Attempt to generate a ZK proof client-side. If it fails, fall back to legacy submit.
+        try {
+            const secretSalt = localStorage.getItem('my_salt') || (Math.floor(Math.random()*1e9).toString());
+            localStorage.setItem('my_salt', secretSalt);
+
+            const ranks = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+            // Map selected cards to numeric ranks expected by the circuit
+            const myCards = selectedIndices.map(i => {
+                const r = myHand[i]?.rank;
+                const idx = ranks.indexOf(r);
+                return idx === -1 ? 13 : idx; // 13 for Joker or unknown
+            });
+
+            const inputs = {
+                playedValues: myCards,
+                claimedRank: ranks.indexOf(rankToClaim),
+                claimedCount: myCards.length
+            };
+
+            const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+                inputs,
+                "/zk/verifyPlay.wasm",
+                "/zk/circuit_final.zkey"
+            );
+
+            await playTurn(code, userId, selectedIndices, rankToClaim, { proof: JSON.stringify(proof), publicSignals });
+            setIsDeclaring(false);
+            setSelectedIndices([]);
+        } catch (e) {
+            // Proof generation failed or snarkjs not available — submit legacy move (no proof)
+            try {
+                await playTurn(code, userId, selectedIndices, rankToClaim);
+                setIsDeclaring(false);
+                setSelectedIndices([]);
+            } catch (err) {
+                alert(err);
+            }
+        }
+    };
+
+    const handleBS = async () => {
+        try {
+            if (lastClaim && (lastClaim.proof || lastClaim.publicSignals)) {
+                // Verify proof client-side using verification key
+                const vKey = await fetch('/zk/verification_key.json').then(r => r.json());
+                const proofObj = lastClaim.proof ? JSON.parse(lastClaim.proof) : null;
+                if (!proofObj) {
+                    // malformed proof -> treat as bluff
+                    await callBS(code, userId, { proofValid: false });
+                    return;
+                }
+                const valid = await snarkjs.groth16.verify(vKey, lastClaim.publicSignals, proofObj);
+                await callBS(code, userId, { proofValid: valid });
+            } else {
+                await callBS(code, userId);
+            }
+        } catch (e) {
+            alert("Error calling BS: " + e);
+        }
+    };
+
+    const handleTruth = async () => {
+        try {
+            await voteTruth(code, userId);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleReturnToMenu = () => {
+        router.push("/");
+    };
+
+    return (
+        <main className={`relative min-h-screen bg-linear-to-tl from-[#9F2A2A] to-[#E04C4C] p-4 select-none flex flex-col items-center overflow-hidden`}>
+            
+            {/* --- WIN PENDING POPUP --- */}
+            {isWinPending && !isGameFinished && (
+                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-none">
+                    <div className="m-25 absolute w-[300] h-[200] md:w-[800] md:h-[400] bg-black/60 z-30 flex flex-col text-center items-center space-y-5 rounded-2xl p-5 border-4 border-white/20">
+                        <h1 className="text-white text-xl md:text-3xl text-center font-extrabold mt-2 w-full flex items-center justify-center">
+                            DO YOU THINK
+                        </h1>
+                        <h2 className="text-red-600 text-2xl md:text-5xl text-center font-extrabold w-full flex items-center justify-center">
+                            {potentialWinnerName?.toUpperCase()}
+                        </h2>
+                        <h2 className="text-white text-xl md:text-3xl text-center font-extrabold mb-5 w-full flex items-center justify-center">
+                            IS SAYING BS?
+                        </h2>
+
+                        {/* Voting Status Indicator */}
+                        <div className="text-white/80 font-bold text-lg mb-2">
+                            Votes for Truth: {votesCount} / {votesNeeded}
+                        </div>
+
+                        <div className="flex flex-col md:flex-row text-white space-y-2 md:space-y-0 md:space-x-5 mt-2">
+                            {/* Logic: 
+                                1. If I am the potential winner, I just wait.
+                                2. If I have voted, I see "Waiting".
+                                3. If I haven't voted, I see buttons.
+                            */}
+                            
+                            {gameState.potentialWinnerId === userId ? (
+                                <p className="text-white text-2xl animate-pulse font-bold border-white/50 border-2 p-4 rounded-xl">
+                                    WAITING FOR OPPONENTS...
+                                </p>
+                            ) : hasVoted ? (
+                                <p className="text-green-400 text-2xl font-bold border-green-500/50 border-2 p-4 rounded-xl">
+                                    YOU VOTED TRUTH. WAITING...
+                                </p>
+                            ) : (
+                                <>
+                                    <button onClick={handleBS} className="w-[250] h-[50] md:w-[300] bg-red-600 hover:bg-red-700 rounded-xl text-2xl md:text-4xl font-bold hover:scale-105 transition-transform shadow-lg">
+                                        CLAIM BS
+                                    </button>
+                                    <button onClick={handleTruth} className="w-[250] h-[50] md:w-[300] bg-blue-600 hover:bg-blue-700 rounded-xl text-2xl md:text-4xl font-bold hover:scale-105 transition-transform shadow-lg">
+                                        TELLING TRUTH
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                 </div>
+            )}
+
+            {/* --- WINNER SCREEN --- */}
+            {isGameFinished && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-none" onClick={handleReturnToMenu}>
+                    <div className="m-25 absolute w-[300] h-[200] md:w-[800] md:h-[400] bg-black/60 z-30 flex flex-col text-center justify-center items-center space-y-5 rounded-2xl cursor-pointer border-4 border-yellow-500/50">
+                        <h1 className="text-white text-2xl md:text-5xl text-center font-extrabold mt-5 w-full flex items-center justify-center">
+                            WINNER!
+                        </h1>
+                        <h2 className="text-red-600 text-4xl md:text-6xl text-center font-extrabold mt-5 w-full flex items-center justify-center animate-bounce">
+                            {winnerName?.toUpperCase()}
+                        </h2>
+                        <h2 className="text-white text-2xl md:text-4xl text-center font-extrabold mt-5 w-full flex items-center justify-center">
+                            WON THE GAME!
+                        </h2>
+                        <p className="text-white/50 mt-5 text-lg">Click anywhere to exit</p>
+                    </div>
+                </div>
+            )}
+
+            {/* --- TOP HUD: Opponents & Game Info --- */}
+            <div className="flex absolute p-4 w-full justify-between items-start mb-4">
+                <div className="flex absolute flex-col">
+                    <div className="hidden md:flex flex-col bg-black/40 p-4 rounded-xl text-white text-sm">
+                    <div className="flex flex-row justify-between">
+                        <h3 className="font-bold mb-2 text-white">PLAYERS</h3>
+                        <h3 className="font-bold mb-2 text-white">CARD COUNTS</h3>
+                    </div>
+                        {players.map((p, i) => (
+                            <div key={i} className={`flex justify-between w-40 ${gameState.turnIndex === i ? "text-blue-300 font-bold" : ""}`}>
+                                <span>{p.name}</span>
+                                <span>{p.hand.length} Cards</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex flex-row justify-between mt-5">
+                        <label className="text-white font-bold">NOT BS</label>
+                        <label className="text-white font-bold">BS</label>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-4">
+                        <div
+                            className="bg-green-300 h-4 rounded-full"
+                            style={{ width: `${bsValue}%` }}
+                        />
+                    </div>
+                </div>
+
+                {/* --- LAST CLAIM NOTIFICATION --- */}
+                {lastClaim && !isWinPending && !isGameFinished && (
+                   <div className="absolute left-1/2 -translate-x-1/2 top-5 flex flex-col items-center z-20">
+                        <div className="bg-black/60 border-2 border-white px-8 py-4 rounded-full text-white font-bold text-xl animate-bounce">
+                            {lastClaim.bsResult ? (
+                                <span className="text-red-400">{lastClaim.bsResult}</span>
+                            ) : (
+                                <span>{lastClaim.playerName} played {lastClaim.count} {lastClaim.rank}(s)</span>
+                            )}
+                        </div>
+                        
+                        {/* BS BUTTON (Only if active and not me) */}
+                        {gameState.bsActive && lastClaim.playerIdx !== myPlayerIndex && !lastClaim.bsResult && (
+                            <button 
+                                onClick={handleBS}
+                                className="mt-4 bg-red-600 hover:bg-red-700 text-white font-extrabold py-3 px-10 rounded-xl shadow-2xl text-2xl border-4 border-red-800 animate-pulse"
+                            >
+                                CALL BS!
+                            </button>
+                        )}
+                    </div>
+                )}
+             </div>
+
+            {/* --- CENTER AREA: Pile & Target --- */}
+            <div className="flex flex-col items-center justify-center mt-20">
+                <div className="relative">
+                    {/* Center Card */}
+                    <div className="opacity-90">
+                         {gameState.discardPile.length > 0 ? (
+                            <Card card={gameState.centerCard} isCenter={true}/>
+                         ) : (
+                            <div className="w-32 h-48 border-4 border-white/20 rounded-xl flex items-center justify-center text-white/50 font-bold">
+                                PILE EMPTY
+                            </div>
+                         )}
+                    </div>
+                </div>
+                
+                <div className="mt-6 text-center">
+                    <p className="text-white/70 text-lg font-bold">CURRENT TARGET RANK</p>
+                    <p className="text-6xl font-extrabold text-white drop-shadow-lg">{targetRank}</p>
+                </div>
+            </div>
+
+            {/* --- DECLARATION MODAL --- */}
+            {isDeclaring && (
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
+                    <div className="bg-white p-8 rounded-2xl text-center">
+                        <h2 className="text-2xl font-bold mb-4 text-black">Confirm Play</h2>
+                        <p className="mb-6 text-black">Play {selectedIndices.length} card(s) as <b>{targetRank}</b>?</p>
+                        <div className="flex gap-4 justify-center">
+                            <button onClick={() => confirmPlay(targetRank)} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold">
+                                YES, PLAY
+                            </button>
+                            <button onClick={() => setIsDeclaring(false)} className="bg-gray-400 text-white px-6 py-3 rounded-lg font-bold">
+                                CANCEL
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- BOTTOM HUD: My Hand & Controls --- */}
+            <div className="w-full absolute bottom-0 pt-4 border-white/10 pb-4">
+                <div className="flex justify-center mb-4">
+                    {isMyTurn ? (
+                        <button 
+                            disabled={selectedIndices.length === 0}
+                            onClick={handlePlay}
+                            className={`px-10 py-3 rounded-xl font-bold text-xl shadow-lg transition-all mb-6 ${
+                                selectedIndices.length > 0 
+                                ? "bg-blue-500 text-white hover:scale-105" 
+                                : "bg-gray-600 text-gray-400 cursor-not-allowed"
+                            }`}
+                        >
+                            {selectedIndices.length > 0 ? "PLAY SELECTED" : "SELECT CARDS"}
+                        </button>
+                    ) : (
+                        <div className="text-white text-xl font-bold animate-pulse">
+                             Waiting for {players[gameState.turnIndex].name}...
+                        </div>
+                    )}
+                </div>
+
+                {/* Hand Display */}
+                <div className="flex justify-center -space-x-12 px-10 pb-2">
+                    {myHand.map((card, idx) => (
+                        <Card 
+                            key={idx} 
+                            card={card} 
+                            isSelected={selectedIndices.includes(idx)} 
+                            onSelect={() => toggleSelect(idx)}
+                        />
+                    ))}
+                </div>
+            </div>
+        </main>
+    );
+}"use client"
+
+import { useEffect, useState } from "react"
+import Card from "@/components/card"
+import { createDeck, shuffleDeck } from "@/lib/deck"
+import { useSearchParams } from "next/navigation";
+import { useRouter } from 'next/navigation';
+import { encodeGameState, decodeGameState } from '@/lib/xor';
+
+export default function Home() {
+  const router = useRouter();
+  const searchParams = useSearchParams(); 
+
+  // --- STATE ---
+  const [hand, setHand] = useState([])
+  const [centerCard, setCenterCard] = useState(null) 
+  const [discardPile, setDiscardPile] = useState([]) 
+  const [targetRank, setTargetRank] = useState("A") 
+  const [allHands, setAllHands] = useState([])
+  const [curPlayerIndex, setCurPlayerIndex] = useState(0)
+  const [selectedIndices, setSelectedIndices] = useState([])
+  
+  const [lastClaim, setLastClaim] = useState("")
+  const [isDeclaring, setIsDeclaring] = useState(false)
+  const [isFirstTurn, setIsFirstTurn] = useState(true)
+
+  const [playerNames, setPlayerNames] = useState(["Host"]);
+  const [playerCount, setPlayerCount] = useState(3);
+
+  // --- CONSTANTS ---
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+  
+  const getNextRank = (currentRank) => {
+     if (!currentRank) return "A"; 
+     const idx = ranks.indexOf(currentRank);
+     return ranks[(idx + 1) % ranks.length];
+  }
+
+  // --- GAME SETUP ---
+  const dealCards = (playerCount) => {
+    const deck = createDeck(true)
+    const shuffled = shuffleDeck(deck)
+    const players = playerCount
+    const cardsPerPlayer = Math.floor(53 / players)
+
+    const hands = []
+    for (let index = 0; index < players; index++) {
+        hands.push(shuffled.splice(-cardsPerPlayer))
+    }
+
+    const center = shuffled.pop()
+    let playerNum = 0
+    for (const card of shuffled) { 
+        hands[playerNum].push(card)
+        playerNum = (playerNum + 1) % players
+    }
+
+    return { hands, centerCard: center, initialPile: [center] }
+  }
+
+  // --- INTERACTION ---
+  const toggleSelectCard = (index) => {
+    let newIndices
+    if (selectedIndices.includes(index)) {
+      newIndices = selectedIndices.filter(i => i !== index)
+    } else {
+      newIndices = [...selectedIndices, index]
+    }
+    setSelectedIndices(newIndices)
+    if (newIndices.length === 0) setIsDeclaring(false)
+  }
+
+  const handleSubmit = () => {
+    setIsDeclaring(true)
+  }
+
+  // --- CORE LOGIC ---
+
+  const confirmClaim = (claimedRank) => {
+    if (selectedIndices.length === 0) {
+      setIsDeclaring(false)
+      return
+    }
+
+    const cardsToRemove = selectedIndices.length
+    
+    // 1. Calculate New State LOCALLY
+    const playerClaim = hand.filter((_, idx) => selectedIndices.includes(idx))
+    const newHand = hand.filter((_, idx) => !selectedIndices.includes(idx))
+    
+    const newAllHands = [...allHands]
+    newAllHands[curPlayerIndex] = newHand
+
+    // 2. Logic for the Center Card / Discard Pile
+    const newCenterCard = { ...centerCard, rank: claimedRank };
+    const newDiscardPile = [...discardPile, ...playerClaim];
+
+    // 3. Calculate the NEXT target rank
+    const nextTargetRank = getNextRank(claimedRank);
+
+    // 4. Update Visual State
+    const playerName = playerNames[curPlayerIndex] || `Player ${curPlayerIndex + 1}`;
+    const claimMsg = `${playerName} claimed ${cardsToRemove} ${claimedRank}(s)`;
+    
+    setHand(newHand)
+    setAllHands(newAllHands)
+    setCenterCard(newCenterCard)
+    setDiscardPile(newDiscardPile)
+    setLastClaim(claimMsg)
+    setSelectedIndices([])
+    setIsDeclaring(false)
+    
+    // 5. Pass Data to Singleplayer (Menu)
+    // We pass an array for the claim: [playerIndex, count, rank]
+    const newClaimArray = [curPlayerIndex, cardsToRemove, claimedRank]
+    
+    goBackToMenuForNextTurn(newAllHands, newCenterCard, newClaimArray, nextTargetRank, playerClaim, newDiscardPile)
+  }
+
+  const goBackToMenuForNextTurn = (updatedAllHands, updatedCenterCard, updatedLastClaim, updatedTargetRank, actualClaim, updatedDiscardPile) => {
+    
+    const gameState = {
+      count: playerCount,
+      nextIndex: (curPlayerIndex + 1) % playerCount,
+      allHands: updatedAllHands,     
+      centerCard: updatedCenterCard, 
+      lastClaim: updatedLastClaim,   
+      targetRank: updatedTargetRank,
+      actualClaim: actualClaim,
+      names: playerNames,
+      discardPile: updatedDiscardPile 
+    };
+
+    const encryptedData = encodeGameState(gameState);
+    
+    const params = new URLSearchParams();
+    params.set("data", encryptedData);
+    
+    router.push(`/singleplayer?${params.toString()}`);
+  }
+
+  // --- LOAD GAME DATA ---
+  useEffect(() => {
+    const data = searchParams.get("data");
+    if (data) {
+      const decrypted = decodeGameState(data);
+      if (decrypted) {
+        localStorage.setItem("game-state", data);
+
+        setPlayerNames(decrypted.names);
+        setPlayerCount(decrypted.count);
+
+        if (!decrypted.allHands || decrypted.allHands === "") { 
+          // Fresh Game
+          const { hands, centerCard, initialPile } = dealCards(decrypted.count);
+          setAllHands(hands);
+          setCenterCard(centerCard);
+          setDiscardPile(initialPile);
+          setHand(hands[0]);
+          setTargetRank(getNextRank(centerCard.rank))
+          setIsFirstTurn(true);
+        } else { 
+          // Existing Game
+          setAllHands(decrypted.allHands);
+          setCenterCard(decrypted.centerCard);
+          setDiscardPile(decrypted.discardPile || []); 
+
+          // Handle Last Claim Message
+          if (Array.isArray(decrypted.lastClaim)) {
+             // Reconstruct string for display
+             const pIdx = decrypted.lastClaim[0];
+             const pName = decrypted.names[pIdx] || `Player ${pIdx + 1}`;
+             setLastClaim(`${pName} claimed ${decrypted.lastClaim[1]} ${decrypted.lastClaim[2]}(s)`);
+          } else {
+             setLastClaim(decrypted.lastClaim);
+          }
+
+          setCurPlayerIndex(decrypted.nextIndex);
+          setHand(decrypted.allHands[decrypted.nextIndex]);
+          
+          setTargetRank(decrypted.targetRank || "A"); 
+          setIsFirstTurn(false);
+        }
+      }
+    } else {
+        // Fallback for dev testing
+        const { hands, centerCard, initialPile } = dealCards(playerCount)
+        setAllHands(hands)
+        setCenterCard(centerCard)
+        setDiscardPile(initialPile)
+        setHand(hands[0])
+        setTargetRank("A")
+    }
+  }, [searchParams]);
+
+  return (
+    
+    <main className="min-h-screen bg-linear-to-tl from-[#9F2A2A] to-[#E04C4C] p-6 select-none flex flex-col items-center relative">
+
+      {/* DECLARATION POPUP */}
+      {isDeclaring && selectedIndices.length > 0 && (
+        <div className="p-2 bg-black/70  w-[300] md:w-[550] rounded-xl shadow-xl flex flex-col items-center gap-4 fixed z-50 top-1/3">
+          <p className="font-bold text-white text-2xl text-center">
+            YOU ARE PLAYING <span className="text-red-600">{selectedIndices.length}</span> CARD(S).
+          </p>
+          <p className="text-white text-sm font-bold text-center">
+             The required rank is <b className="font-extrabold text-red-600">{targetRank}</b>. 
+          </p>
+          
+          <div className="flex gap-2 flex-wrap justify-center max-w-md">
+            <button 
+                onClick={() => confirmClaim(targetRank)}
+                className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-700 transition-colors shadow-lg text-xl"
+              >
+                CLAIM AS {targetRank}?
+            </button>
+          </div>
+
+          {/* <div className=" text-red-700 text-xl font-bold mt-2">Or lie and claim as:</div>
+          <div className="flex gap-2 flex-wrap justify-center">
+             {ranks.filter(r => r !== targetRank).map(r => (
+                  <button 
+                  key={r}
+                  onClick={() => confirmClaim(r)}
+                  className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-red-100 hover:text-red-600 transition-colors"
+                >
+                  {r}
+                </button>
+             ))}
+          </div> */}
+
+          <button 
+            onClick={() => setIsDeclaring(false)}
+            className="mt-4 text-red-500 font-bold text-2xl hover:text-red-700 hover:cursor-pointer" 
+          >
+            CANCEL SELECTION
+          </button>
+        </div>
+      )}
+    <div className="flex flex-col text-center">
+      <h1 className="text-white text-3xl mb-4 font-bold">{playerNames[curPlayerIndex]?.toUpperCase()}'S TURN</h1>
+
+      {/* CLAIM DISPLAY */}
+      {lastClaim && (
+        <div className="mb-2 bg-black/30 px-6 py-2 rounded-full border border-white/20 text-white animate-pulse font-bold text-center">
+          {lastClaim.toUpperCase()}
+        </div>
+      )}
+
+      {/* CENTER CARD & TARGET INFO */}
+      <div className="flex flex-col items-center gap-2 mb-8 p-4 bg-black/10 rounded-xl">
+        <span className="text-white font-bold text-lg">
+            {discardPile.length === 0 ? "PILE EMPTY" : (isFirstTurn ? "START THE GAME" : "DISCARD PILE")}
+        </span>
+        
+        <div className={discardPile.length === 0 ? "opacity-20" : "opacity-100"}>
+            <Card card={centerCard} isCenter={true} faceDown={!isFirstTurn && discardPile.length > 0} />
+        </div>
+        
+        <div className="flex flex-col items-center mt-2">
+            <p className="text-white/60 text-sm">TARGET RANK FOR YOU:</p>
+            <p className="text-3xl font-extrabold text-blue-300">
+                {targetRank}
+            </p>
+        </div>
+      </div>
+
+      {/* PLAYER CARD COUNT DISPLAY (SIDEBAR) */}
+      <div className="md:absolute md:right-4 md:top-4 mb-5 bg-black/40 p-4 rounded-xl text-white">
+        <h3 className="font-extrabold mb-2">CARD COUNTS</h3>
+        <ul>
+          {allHands.map((h, i) => (
+            <li key={i} className={`flex justify-between gap-4 ${i === curPlayerIndex ? "text-blue-300 font-bold" : "text-white/80"}`}>
+                <span>{playerNames[i] || `P${i+1}`}:</span>
+                <span>{h ? h.length : 0}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+
+      {/* BUTTONS */}
+      <div className="flex gap-4 mb-4">
+        {!isDeclaring && (
+          <button
+            className={`rounded px-6 py-2 font-bold shadow-md transition-all text-white ${
+              selectedIndices.length > 0 
+                ? "bg-blue-400 text-black hover:scale-105 cursor-pointer" 
+                : "bg-gray-800 text-gray-300 cursor-not-allowed opacity-50"
+            }`}
+            onClick={handleSubmit}
+            disabled={selectedIndices.length === 0}
+          >
+            SELECT CARDS ({selectedIndices.length})
+          </button>
+        )}
+      </div>
+
+      {/* HAND */}
+      <div className="flex justify-center -space-x-10 transition-all duration-300 max-w-full overflow-x-auto py-5 mt-auto w-full ">
+        {hand.map((card, index) => (
+          <Card 
+            key={`${curPlayerIndex}-${index}`} 
+            card={card} 
+            isSelected={selectedIndices.includes(index)}
+            onSelect={() => toggleSelectCard(index)}
+          />
+        ))}
+      </div>
+    </main>
+  )
+}import { ArrowLeftCircleIcon } from "lucide-react";
+// import Image from "next/image";
+import Link from "next/link";
+
+export default function rules(){
+	return(
+    <div className="flex min-h-screen items-center justify-center bg-radial from-[#BA2237] from-30% to-[#0C162D] select-none">
+      <main className="flex flex-col justify-center p-5 rounded-2xl bg-black/20 sm:items-start">
+        <Link href="/" className="hover:scale-110">
+            <ArrowLeftCircleIcon className="w-10 h-10 text-white"></ArrowLeftCircleIcon>
+        </Link>
+      <div>
+        <div className="flex flex-row justify-center">
+          {/* <Image className="justify-center mr-2" src="LogoWhite.svg" width={150} height={40} alt='Logo' priority>
+          </Image> */}
+          <h1 className="font-bold text-6xl items-center justify-center flex text-white mt-2">
+            HOW TO PLAY:
+          </h1>
+        </div>
+        <div className="flex justify-center items-center w-160 mb-2">
+        <div className="flex flex-col justify-center w-90 mt-5 text-white">   
+            <ul className="font-bold mt-2 text-xl">
+                Objective:
+            </ul>
+            <li>
+                Be the first to get rid of all your cards.
+            </li>
+            <ul className="font-bold mt-2 text-xl">
+                Playing Cards:
+            </ul>
+            <li>
+                Cards must be placed in ascending order.
+            </li>
+            <li>
+                A single or multiple card(s) can be placed.
+            </li>
+            <li>
+                All cards must be the same rank for multiple.
+            </li>
+            <li>
+                If you don't have any, you can lie (BS).
+            </li>
+            <ul className="font-bold mt-2 text-xl">
+                Calling BS:
+            </ul>
+            <li>
+                If they're lying, they take the pile.
+            </li>
+            <li>
+                If not, the caller takes the pile.
+            </li>
+            <ul className="font-bold mt-2 text-xl">
+                Joker/Jack Card:
+            </ul>
+            <li>
+                Can be played as any card in the deck.
+            </li>
+            <li>
+                Be careful as you may be called BS.
+            </li>
+            <ul className="font-bold mt-2 text-xl">
+                Other Rules:
+            </ul>
+            <li>
+                If you don't want to bluff, you can skip.
+            </li>
+            <li>
+                For bluff, you pick the amount of cards.
+            </li>
+        </div>
+        </div>
+    </div> 
+      </main>
+    </div>
+	);
+}"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Navigation from "@/components/ui/nav";
+ 
+
+export default function JoinGame() {
+  const [gameCode, setGameCode] = useState("");
+  const [userName, setUserName] = useState("");
+  const [blameCode, setBlameCode] = useState(false);
+  const [blameDetail, setBlameDetail] = useState(false);
+  const router = useRouter();
+
+  const setBlameCodeFunc = () => {
+    setBlameCode(false);
+  }
+
+  const setBlameDetailFunc = () => {
+    setBlameDetail(false);
+  }
+  
+  const handleJoin = () => {
+    if (!gameCode || !userName) {
+      // alert("Please enter both a name and a game code!");
+      // return;
+      setBlameDetail(true);
+    }
+    else if (gameCode.length !== 6)
+      {setBlameCode(true);}
+    else if (gameCode.length === 6)
+    {localStorage.setItem("zk_user_name", userName);
+      router.push(`/online/${gameCode.toUpperCase()}`);
+    }
+    else {alert("Please enter a valid code")}
+  };
+
+  return (
+    <main className="flex min-h-screen flex-col items-center bg-radial from-[#BA2237] to-[#261447] p-4">
+      <Navigation></Navigation>
+      {blameDetail && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="bg-white/60 border-5 border-white p-8 rounded-2xl text-center max-w-lg flex flex-col items-center gap-4">
+        <h2 className="text-4xl font-bold text-white mb-2">PLEASE ENSURE THAT ALL FIELDS ARE COMPLETED</h2>
+        <button onClick={setBlameDetailFunc} className="text-2xl bg-[#F30000]/60 font-bold text-white p-2 rounded-xl cursor-pointer">TRY AGAIN</button>
+        </div>
+        </div>}
+      {blameCode && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="bg-white/60 border-5 border-white p-8 rounded-2xl text-center max-w-lg flex flex-col items-center gap-4">
+        <h2 className="text-4xl font-bold text-white mb-2">PLEASE ENTER A VALID CODE</h2>
+        <button onClick={setBlameCodeFunc} className="text-2xl bg-[#F30000]/60 font-bold text-white p-2 rounded-xl cursor-pointer">TRY AGAIN</button>
+        </div>
+        </div>}
+      <div className="flex justify-center items-center p-15">
+      <div className="bg-black/40 p-8 rounded-2xl backdrop-blur-md w-full max-w-md border border-white/20 flex items-center justify-center flex-col">
+        <h1 className="text-white text-3xl md:text-5xl font-bold mb-6 text-center">JOIN GAME</h1>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="text-white font-bold text-sm md:text-xl ml-1">YOUR NAME</label>
+            <input 
+              type="text"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+              placeholder="ENTER NAME"
+              className="w-full p-4 mt-2 rounded-xl bg-white/10 border border-white/20 text-white text-xl focus:outline-2 outline-white focus:border-white"
+            />
+          </div>
+          <div>
+            <label className="text-white font-bold text-sm md:text-xl ml-1">GAME CODE</label>
+            <input 
+              type="text"
+              value={gameCode}
+              onChange={(e) => setGameCode(e.target.value)}
+              placeholder="ENTER GAME CODE"
+              className="w-full p-4 mt-2 rounded-xl bg-white/10 border border-white/20 text-white text-xl focus:outline-2 outline-white focus:border-white"
+            />
+          </div>
+
+          <button 
+            onClick={handleJoin}
+            className="w-full py-4 hover:bg-[#F30000]/60 bg-red-600 text-white font-bold text-2xl rounded-xl transition-all shadow-lg active:scale-95 cursor-pointer"
+          >
+            JOIN LOBBY
+          </button>
+        </div>
+      </div>
+      </div>
+    </main>
+  );
+}"use client"
+import { useEffect, useState } from "react";
+import { TabletSmartphone, Smartphone, ArrowLeftCircleIcon } from 'lucide-react';
+import Link from 'next/link';
+import { gameCode } from '@/lib/gamecode';
+import { useRouter } from 'next/navigation';
+// #28a1e2
+// #53e4cc
+
+export default function Home() {
+  const [name, setName] = useState("")
+  const [nameStatus, setNameStatus] = useState(false)
+  const router = useRouter();
+
+  const nameFunc = () => {
+    setNameStatus(true);
+  }
+
+  const removeNameFunc = () => {
+    setNameStatus(false);
+  }
+
+  function gameRoom(){
+    const code = gameCode();
+    localStorage.setItem("zk_user_name", name)
+    router.push(`/online/${code}`)
+  }
+  return (
+    <div className="flex min-h-screen items-center overflow-hidden justify-center bg-radial from-[#BA2237] from-30% to-[#261447] select-none">
+      <main className="flex flex-col justify-center p-5 sm:p-10 rounded-2xl bg-black/20">
+        <Link href="/" className="w-15 h-15 hover:scale-110 justify-center items-center flex">
+          <ArrowLeftCircleIcon className="w-10 h-10 text-white"></ArrowLeftCircleIcon>
+        </Link>
+        {nameStatus && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                <div className="bg-white/40 outline-4 outline-white p-8 rounded-2xl text-center max-w-lg flex flex-col items-center space-y-5">
+                    <h1 className="text-5xl text-white font-bold">ENTER NAME</h1>
+                    <input onChange={(e) => setName(e.target.value)}></input>
+                    <input 
+                    type="text"
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="ENTER NAME"
+                    className="w-[200] p-4 rounded-xl bg-white/10 border border-white/20 text-white text-xl focus:outline-2 outline-white focus:border-white"
+                    />
+                    <button onClick={gameRoom} className="mt-5 cursor-pointer text-white text-2xl p-2 font-bold bg-[#F30000]/60 rounded-xl w-[200]">SET NAME</button>
+                    <button onClick={removeNameFunc} className="cursor-pointer text-white text-2xl p-2 font-bold bg-[#F30000]/60 rounded-xl w-[200]">BACK BUTTON</button>
+                    </div>
+                </div>}
+        <div>
+          <div className="flex flex-row justify-center">
+            <h1 className="font-bold text-2xl lg:text-6xl items-center justify-center flex text-white mt-2">
+              PICK YOUR GAME MODE:
+            </h1>
+          </div> 
+          <div className="flex flex-row mt-8 justify-center items-center">
+            <button onClick={nameFunc} className="hover:scale-105 flex flex-col items-center w-40 h-70 md:h-100 md:w-75 bg-[#53e4cc]/80 mr-5 rounded-3xl shadow-2xl cursor-pointer">
+                <TabletSmartphone className="size-8 sm:size-12 mt-5 text-white"/>
+                <h3 className="text-lg sm:text-3xl text-white font-bold">
+                  Multiple Devices
+                </h3>
+                <ul className="text-gray-300">
+                  3-10 Players
+                </ul>
+                <div className="mt-5 sm:mt-20 text-white text-left font-bold ml-5 sm:ml-3">
+                  <li>
+                    Players join the room by a code
+                  </li>
+                  <li>
+                    Every player has their own device
+                  </li>
+                  <li>
+                    AI-Bluff detector
+                  </li>
+                </div>
+            </button>
+            <Link href="/singleplayer" className="hover:scale-105 flex flex-col items-center w-40 h-70 md:h-100 md:w-75 bg-[#28a1e2]/80 ml-5 rounded-3xl shadow-2xl">
+                <Smartphone className="size-8 sm:size-12 mt-5 text-white"/>
+                <h3 className="text-lg sm:text-3xl text-white font-bold">
+                  Single Device
+                </h3>
+                <ul className="text-gray-300">
+                  3-8 Players
+                </ul>
+                <div className="mt-5 sm:mt-20 text-white text-left font-bold ml-5 sm:ml-3">
+                  <li>
+                    Only one device
+                  </li>
+                  <li>
+                    Device gets passed around
+                  </li>
+                  <li>
+                    Bluff can happen one at a time
+                  </li>
+                </div>
+            </Link>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+"use client"
+
+import { useEffect, useState } from "react"
+import Card from "@/components/card"
+import { createDeck, shuffleDeck } from "@/lib/deck"
+import { useSearchParams } from "next/navigation";
+import { useRouter } from 'next/navigation';
+import { encodeGameState, decodeGameState } from '@/lib/xor';
+
+export default function Home() {
+  const router = useRouter();
+  const searchParams = useSearchParams(); 
+
+  // --- STATE ---
+  const [hand, setHand] = useState([])
+  const [centerCard, setCenterCard] = useState(null) 
+  const [discardPile, setDiscardPile] = useState([]) 
+  const [targetRank, setTargetRank] = useState("A") 
+  const [allHands, setAllHands] = useState([])
+  const [curPlayerIndex, setCurPlayerIndex] = useState(0)
+  const [selectedIndices, setSelectedIndices] = useState([])
+  
+  const [lastClaim, setLastClaim] = useState("")
+  const [isDeclaring, setIsDeclaring] = useState(false)
+  const [isFirstTurn, setIsFirstTurn] = useState(true)
+
+  const [playerNames, setPlayerNames] = useState(["Host"]);
+  const [playerCount, setPlayerCount] = useState(3);
+
+  // --- CONSTANTS ---
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+  
+  const getNextRank = (currentRank) => {
+     if (!currentRank) return "A"; 
+     const idx = ranks.indexOf(currentRank);
+     return ranks[(idx + 1) % ranks.length];
+  }
+
+  // --- GAME SETUP ---
+  const dealCards = (playerCount) => {
+    const deck = createDeck(false)
+    const shuffled = shuffleDeck(deck)
+    const players = playerCount
+    const cardsPerPlayer = Math.floor(51 / players)
+
+    const hands = []
+    for (let index = 0; index < players; index++) {
+        hands.push(shuffled.splice(-cardsPerPlayer))
+    }
+
+    const center = shuffled.pop()
+    let playerNum = 0
+    for (const card of shuffled) { 
+        hands[playerNum].push(card)
+        playerNum = (playerNum + 1) % players
+    }
+
+    return { hands, centerCard: center, initialPile: [center] }
+  }
+
+  // --- INTERACTION ---
+  const toggleSelectCard = (index) => {
+    let newIndices
+    if (selectedIndices.includes(index)) {
+      newIndices = selectedIndices.filter(i => i !== index)
+    } else {
+      newIndices = [...selectedIndices, index]
+    }
+    setSelectedIndices(newIndices)
+    if (newIndices.length === 0) setIsDeclaring(false)
+  }
+
+  const handleSubmit = () => {
+    setIsDeclaring(true)
+  }
+
+  // --- CORE LOGIC ---
+
+  const confirmClaim = (claimedRank) => {
+    if (selectedIndices.length === 0) {
+      setIsDeclaring(false)
+      return
+    }
+
+    const cardsToRemove = selectedIndices.length
+    
+    // 1. Calculate New State LOCALLY
+    const playerClaim = hand.filter((_, idx) => selectedIndices.includes(idx))
+    const newHand = hand.filter((_, idx) => !selectedIndices.includes(idx))
+    
+    const newAllHands = [...allHands]
+    newAllHands[curPlayerIndex] = newHand
+
+    // 2. Logic for the Center Card / Discard Pile
+    const newCenterCard = { ...centerCard, rank: claimedRank };
+    const newDiscardPile = [...discardPile, ...playerClaim];
+
+    // 3. Calculate the NEXT target rank
+    const nextTargetRank = getNextRank(claimedRank);
+
+    // 4. Update Visual State
+    const playerName = playerNames[curPlayerIndex] || `Player ${curPlayerIndex + 1}`;
+    const claimMsg = `${playerName} claimed ${cardsToRemove} ${claimedRank}(s)`;
+    
+    setHand(newHand)
+    setAllHands(newAllHands)
+    setCenterCard(newCenterCard)
+    setDiscardPile(newDiscardPile)
+    setLastClaim(claimMsg)
+    setSelectedIndices([])
+    setIsDeclaring(false)
+    
+    // 5. Pass Data to Singleplayer (Menu)
+    // We pass an array for the claim: [playerIndex, count, rank]
+    const newClaimArray = [curPlayerIndex, cardsToRemove, claimedRank]
+    
+    goBackToMenuForNextTurn(newAllHands, newCenterCard, newClaimArray, nextTargetRank, playerClaim, newDiscardPile)
+  }
+
+  const goBackToMenuForNextTurn = (updatedAllHands, updatedCenterCard, updatedLastClaim, updatedTargetRank, actualClaim, updatedDiscardPile) => {
+    
+    const gameState = {
+      count: playerCount,
+      nextIndex: (curPlayerIndex + 1) % playerCount,
+      allHands: updatedAllHands,     
+      centerCard: updatedCenterCard, 
+      lastClaim: updatedLastClaim,   
+      targetRank: updatedTargetRank,
+      actualClaim: actualClaim,
+      names: playerNames,
+      discardPile: updatedDiscardPile 
+    };
+
+    const encryptedData = encodeGameState(gameState);
+    
+    const params = new URLSearchParams();
+    params.set("data", encryptedData);
+    
+    router.push(`/singleplayer?${params.toString()}`);
+  }
+
+  // --- LOAD GAME DATA ---
+  useEffect(() => {
+    const data = searchParams.get("data");
+    if (data) {
+      const decrypted = decodeGameState(data);
+      if (decrypted) {
+        localStorage.setItem("game-state", data);
+
+        setPlayerNames(decrypted.names);
+        setPlayerCount(decrypted.count);
+
+        if (!decrypted.allHands || decrypted.allHands === "") { 
+          // Fresh Game
+          const { hands, centerCard, initialPile } = dealCards(decrypted.count);
+          setAllHands(hands);
+          setCenterCard(centerCard);
+          setDiscardPile(initialPile);
+          setHand(hands[0]);
+          setTargetRank(getNextRank(centerCard.rank))
+          setIsFirstTurn(true);
+        } else { 
+          // Existing Game
+          setAllHands(decrypted.allHands);
+          setCenterCard(decrypted.centerCard);
+          setDiscardPile(decrypted.discardPile || []); 
+
+          // Handle Last Claim Message
+          if (Array.isArray(decrypted.lastClaim)) {
+             // Reconstruct string for display
+             const pIdx = decrypted.lastClaim[0];
+             const pName = decrypted.names[pIdx] || `Player ${pIdx + 1}`;
+             setLastClaim(`${pName} claimed ${decrypted.lastClaim[1]} ${decrypted.lastClaim[2]}(s)`);
+          } else {
+             setLastClaim(decrypted.lastClaim);
+          }
+
+          setCurPlayerIndex(decrypted.nextIndex);
+          setHand(decrypted.allHands[decrypted.nextIndex]);
+          
+          setTargetRank(decrypted.targetRank || "A"); 
+          setIsFirstTurn(false);
+        }
+      }
+    } else {
+        // Fallback for dev testing
+        const { hands, centerCard, initialPile } = dealCards(playerCount)
+        setAllHands(hands)
+        setCenterCard(centerCard)
+        setDiscardPile(initialPile)
+        setHand(hands[0])
+        setTargetRank("A")
+    }
+  }, [searchParams]);
+
+  return (
+    
+    <main className="min-h-screen bg-linear-to-tl from-[#9F2A2A] to-[#E04C4C] p-6 select-none flex flex-col items-center relative">
+
+      {/* DECLARATION POPUP */}
+      {isDeclaring && selectedIndices.length > 0 && (
+        <div className="p-2 bg-black/70  w-[300] md:w-[550] rounded-xl shadow-xl flex flex-col items-center gap-4 fixed z-50 top-1/3">
+          <p className="font-bold text-white text-2xl text-center">
+            YOU ARE PLAYING <span className="text-red-600">{selectedIndices.length}</span> CARD(S).
+          </p>
+          <p className="text-white text-sm font-bold text-center">
+             The required rank is <b className="font-extrabold text-red-600">{targetRank}</b>. 
+          </p>
+          
+          <div className="flex gap-2 flex-wrap justify-center max-w-md">
+            <button 
+                onClick={() => confirmClaim(targetRank)}
+                className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-700 transition-colors shadow-lg text-xl"
+              >
+                CLAIM AS {targetRank}?
+            </button>
+          </div>
+
+          {/* <div className=" text-red-700 text-xl font-bold mt-2">Or lie and claim as:</div>
+          <div className="flex gap-2 flex-wrap justify-center">
+             {ranks.filter(r => r !== targetRank).map(r => (
+                  <button 
+                  key={r}
+                  onClick={() => confirmClaim(r)}
+                  className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-red-100 hover:text-red-600 transition-colors"
+                >
+                  {r}
+                </button>
+             ))}
+          </div> */}
+
+          <button 
+            onClick={() => setIsDeclaring(false)}
+            className="mt-4 text-red-500 font-bold text-2xl hover:text-red-700 hover:cursor-pointer" 
+          >
+            CANCEL SELECTION
+          </button>
+        </div>
+      )}
+    <div className="flex flex-col text-center">
+      <h1 className="text-white text-3xl mb-4 font-bold">{playerNames[curPlayerIndex]?.toUpperCase()}'S TURN</h1>
+
+      {/* CLAIM DISPLAY */}
+      {lastClaim && (
+        <div className="mb-2 bg-black/30 px-6 py-2 rounded-full border border-white/20 text-white animate-pulse font-bold text-center">
+          {lastClaim.toUpperCase()}
+        </div>
+      )}
+
+      {/* CENTER CARD & TARGET INFO */}
+      <div className="flex flex-col items-center gap-2 mb-8 p-4 bg-black/10 rounded-xl">
+        <span className="text-white font-bold text-lg">
+            {discardPile.length === 0 ? "PILE EMPTY" : (isFirstTurn ? "START THE GAME" : "DISCARD PILE")}
+        </span>
+        
+        <div className={discardPile.length === 0 ? "opacity-20" : "opacity-100"}>
+            <Card card={centerCard} isCenter={true} faceDown={!isFirstTurn && discardPile.length > 0} />
+        </div>
+        
+        <div className="flex flex-col items-center mt-2">
+            <p className="text-white/60 text-sm">TARGET RANK FOR YOU:</p>
+            <p className="text-3xl font-extrabold text-blue-300">
+                {targetRank}
+            </p>
+        </div>
+      </div>
+
+      {/* PLAYER CARD COUNT DISPLAY (SIDEBAR) */}
+      <div className="md:absolute md:right-4 md:top-4 mb-5 bg-black/40 p-4 rounded-xl text-white">
+        <h3 className="font-extrabold mb-2">CARD COUNTS</h3>
+        <ul>
+          {allHands.map((h, i) => (
+            <li key={i} className={`flex justify-between gap-4 ${i === curPlayerIndex ? "text-blue-300 font-bold" : "text-white/80"}`}>
+                <span>{playerNames[i] || `P${i+1}`}:</span>
+                <span>{h ? h.length : 0}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+
+      {/* BUTTONS */}
+      <div className="flex gap-4 mb-4">
+        {!isDeclaring && (
+          <button
+            className={`rounded px-6 py-2 font-bold shadow-md transition-all text-white ${
+              selectedIndices.length > 0 
+                ? "bg-blue-400 text-black hover:scale-105 cursor-pointer" 
+                : "bg-gray-800 text-gray-300 cursor-not-allowed opacity-50"
+            }`}
+            onClick={handleSubmit}
+            disabled={selectedIndices.length === 0}
+          >
+            SELECT CARDS ({selectedIndices.length})
+          </button>
+        )}
+      </div>
+
+      {/* HAND */}
+      <div className="flex justify-center -space-x-10 transition-all duration-300 max-w-full overflow-x-auto py-5 mt-auto w-full ">
+        {hand.map((card, index) => (
+          <Card 
+            key={`${curPlayerIndex}-${index}`} 
+            card={card} 
+            isSelected={selectedIndices.includes(index)}
+            onSelect={() => toggleSelectCard(index)}
+          />
+        ))}
+      </div>
+    </main>
+  )
+}const suits = ["hearts", "diamonds", "clubs", "spades"]
+const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+
+export const createDeck = (isJoker = false) => {
+  const deck = suits.flatMap((suit) =>
+    ranks.map((rank) => ({
+      suit,
+      rank,
+    }))
+  )
+  if (isJoker) {
+    deck.push(
+      {suit: "joker", rank: "Joker"},
+      {suit: "joker", rank: "Joker"});
+  }
+  return deck;
+}
+export const shuffleDeck = (deck) => {
+  const shuffled = [...deck];
+  
+  // We use a Uint32Array to get high-quality random integers
+  const randomValues = new Uint32Array(1);
+
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    // 1. Get a fresh random 32-bit integer
+    crypto.getRandomValues(randomValues);
+    
+    // 2. Map that integer to the range [0, i]
+    // Using modulo here is generally fine for deck shuffling, 
+    // but we use the value from the typed array.
+    const j = randomValues[0] % (i + 1);
+    
+    // 3. Swap elements
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  
+  return shuffled;
+};
+    // Helper utilities for Poseidon commitments and formatting proofs
+// Dynamically import Poseidon from circomlibjs and handle multiple possible exports.
+
+async function loadPoseidon() {
+  const mod = await import('circomlibjs');
+  // Prefer the high-level builder which returns a usable function
+  if (mod.buildPoseidon) {
+    return await mod.buildPoseidon();
+  }
+  // Fallbacks (less likely to work in the browser)
+  if (mod.buildPoseidonWasm) {
+    // buildPoseidonWasm requires a wasm module; try calling buildPoseidon (above) first
+    throw new Error('circomlibjs exports buildPoseidonWasm but buildPoseidon is missing; please use a circomlibjs build that includes buildPoseidon.');
+  }
+  if (mod.poseidonContract) {
+    throw new Error('circomlibjs provides only poseidonContract (EVM helper). Please install a circomlibjs that exports buildPoseidon.');
+  }
+  throw new Error('No usable Poseidon found in circomlibjs. Ensure you have a recent circomlibjs release that exports buildPoseidon.');
+}
+
+function toBigIntArray(arr) {
+  return arr.map(x => BigInt(x));
+}
+
+export async function poseidonHash(inputs) {
+  const poseidon = await loadPoseidon();
+  const bigs = toBigIntArray(inputs);
+  // Reduce inputs iteratively to support arbitrary length hands.
+  // Use the poseidon state parameter to fold inputs: state = poseidon([value], state)
+  let state = undefined;
+  for (const v of bigs) {
+    state = poseidon([v], state);
+  }
+  const res = state;
+  if (poseidon.F && typeof poseidon.F.toString === 'function') {
+    return poseidon.F.toString(res);
+  }
+  // Fallback: convert Uint8Array to hex
+  if (res && res.buffer) {
+    return Buffer.from(res).toString('hex');
+  }
+  return String(res);
+}
+
+// Generate a hand commitment from an array of card identifiers and a salt.
+// cards: array of integers (card IDs or ranks). salt: integer or hex string.
+export async function generateHandCommitment(cards, salt) {
+  const inputs = [...cards, salt];
+  return poseidonHash(inputs);
+}
+
+// Utility: normalize proof to JSON string for storage
+export function serializeProof(proof) {
+  return JSON.stringify(proof);
+}
+
+// Utility: parse proof from stored string
+export function parseProof(proofString) {
+  try {
+    return JSON.parse(proofString);
+  } catch (e) {
+    return null;
+  }
+}
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyDGSW4Ri2NJ2yA-4N6Vv1iWVWJb2e1UT4c",
+  authDomain: "zk-bluff-94cd6.firebaseapp.com",
+  projectId: "zk-bluff-94cd6",
+  storageBucket: "zk-bluff-94cd6.firebasestorage.app",
+  messagingSenderId: "896750423528",
+  appId: "1:896750423528:web:5f60e3350e408ed4d3a85d",
+  measurementId: "G-S607K729MB"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app);import { db } from "./firebase";
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, onSnapshot, runTransaction } from "firebase/firestore";
+import { createDeck, shuffleDeck } from "./deck";
+
+// --- JOINING & LOBBY ---
+
+export const joinGameRoom = async (gameCode, playerName, userId) => {
+  const gameRef = doc(db, "games", gameCode);
+  const gameSnap = await getDoc(gameRef);
+
+  if (!gameSnap.exists()) {
+    // Create new game if it doesn't exist (Host logic)
+    await setDoc(gameRef, {
+      code: gameCode,
+      status: "waiting",
+      hostId: userId,
+      createdAt: Date.now(),
+      players: [{
+        id: userId,
+        name: playerName,
+        hand: [],
+        isHost: true
+      }],
+      gameState: null
+    });
+  } else {
+    // Join existing game
+    const data = gameSnap.data();
+    if (data.status !== "waiting") throw new Error("Game already started");
+    if (data.players.length >= 10){return (<div>HELLO</div>)}
+    // Prevent duplicate joining
+    const existingPlayer = data.players.find(p => p.id === userId);
+    if (!existingPlayer) {
+      await updateDoc(gameRef, {
+        players: arrayUnion({
+          id: userId,
+          name: playerName,
+          hand: [],
+          isHost: false
+        })
+      });
+    }
+  }
+};
+
+export const subscribeToGame = (gameCode, callback) => {
+  return onSnapshot(doc(db, "games", gameCode), (doc) => {
+    if (doc.exists()) callback(doc.data());
+  });
+};
+
+export const startGame = async (gameCode) => {
+  const gameRef = doc(db, "games", gameCode);
+  
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw "Game not found";
+
+    const data = gameDoc.data();
+    const playerList = data.players;
+    
+    // Deal Cards
+    const deck = shuffleDeck(createDeck(true)); // false/true for Joker
+    const centerCard = deck.pop();
+    const pile = [centerCard];
+
+    // Distribute
+    let pIdx = 0;
+    while(deck.length > 0) {
+        playerList[pIdx].hand.push(deck.pop());
+        pIdx = (pIdx + 1) % playerList.length;
+    }
+
+    const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+    const nextTargetRank = ranks[(ranks.indexOf(centerCard.rank) + 1) % ranks.length];
+
+    const initialState = {
+        turnIndex: 0,
+        centerCard: centerCard,
+        discardPile: pile,
+        targetRank: nextTargetRank,
+        lastClaim: null,
+        bsActive: false
+    };
+
+    transaction.update(gameRef, {
+        status: "playing",
+        players: playerList,
+        gameState: initialState
+    });
+  });
+};
+
+// --- GAMEPLAY ACTIONS ---
+
+export const playTurn = async (gameCode, userId, selectedIndices, claimedRank, opts = {}) => {
+    const gameRef = doc(db, "games", gameCode);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        const data = gameDoc.data();
+        const state = data.gameState;
+        const players = data.players;
+        const playerIdx = players.findIndex(p => p.id === userId);
+
+        if (playerIdx !== state.turnIndex) throw "Not your turn";
+
+        const hand = players[playerIdx].hand || [];
+
+        // Determine if server-side hand contains real card objects or placeholders
+        const hasRealCards = hand.length > 0 && hand[0] && hand[0].rank;
+        let playedCards = [];
+        let newHand = [];
+
+        if (hasRealCards) {
+          playedCards = selectedIndices.map(i => hand[i]);
+          newHand = hand.filter((_, i) => !selectedIndices.includes(i));
+        } else {
+          // Placeholder flow: we only have counts; remove by count and create hidden placeholders
+          const playedCount = selectedIndices.length;
+          const currentCount = hand.length;
+          const remaining = Math.max(0, currentCount - playedCount);
+          newHand = Array(remaining).fill({ hidden: true });
+          playedCards = Array(playedCount).fill({ suit: 'hidden', rank: 'Hidden' });
+        }
+
+        players[playerIdx].hand = newHand;
+
+        const newPile = [...state.discardPile, ...playedCards];
+        
+        const ranks = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+        const nextRank = ranks[(ranks.indexOf(claimedRank) + 1) % ranks.length];
+        
+        // CHECK WIN CONDITION
+        const isHandEmpty = newHand.length === 0;
+
+        // If the caller provided a ZK proof, we DO NOT store actual card values in the DB.
+        // Instead store the proof and publicSignals (client proves honesty).
+        const claimObj = {
+          playerIdx: playerIdx,
+          playerName: players[playerIdx].name,
+          count: playedCards.length,
+          rank: claimedRank
+        };
+
+        if (opts.proof || opts.publicSignals) {
+          claimObj.proof = opts.proof ? opts.proof : null;
+          claimObj.publicSignals = opts.publicSignals ? opts.publicSignals : null;
+          // Keep minimal info only
+        } else {
+          // Legacy behavior: store actual cards (no proof provided)
+          claimObj.actualCards = playedCards;
+        }
+
+        transaction.update(gameRef, {
+          players: players,
+          "gameState.discardPile": newPile,
+          "gameState.centerCard": { ...state.centerCard, rank: claimedRank },
+          "gameState.lastClaim": claimObj,
+          "gameState.targetRank": nextRank,
+          "gameState.turnIndex": (state.turnIndex + 1) % players.length,
+          "gameState.bsActive": true,
+          // NEW: Initialize voting state
+          "gameState.winPending": isHandEmpty, 
+          "gameState.potentialWinnerId": isHandEmpty ? userId : null,
+          "gameState.truthVotes": [] // Array to store userIds who accepted the truth
+        });
+    });
+};
+
+export const callBS = async (gameCode, challengerId, opts = {}) => {
+  // opts: { proofValid: true/false } -- required when lastClaim uses proof
+  const gameRef = doc(db, "games", gameCode);
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    const data = gameDoc.data();
+    const state = data.gameState;
+        
+    if (!state.lastClaim) throw "Nothing to call BS on";
+
+    const claim = state.lastClaim;
+    const players = data.players;
+
+    let isLie = false;
+
+    if (claim.proof || claim.publicSignals) {
+      // New flow: rely on caller to verify proof client-side (snarkjs) and pass proofValid
+      if (typeof opts.proofValid === 'undefined' || opts.proofValid === null) {
+        throw "proofValid required when last claim contains a proof";
+      }
+      isLie = !opts.proofValid;
+    } else if (claim.actualCards) {
+      // Legacy: server-inspect actual cards
+      const actualCards = claim.actualCards;
+      const claimedRank = claim.rank;
+      actualCards.forEach(card => {
+        if (card.rank !== claimedRank && card.rank !== "Joker") isLie = true;
+      });
+    } else {
+      // No info: default to lie (conservative)
+      isLie = true;
+    }
+
+    const loserIndex = isLie ? claim.playerIdx : data.players.findIndex(p => p.id === challengerId);
+
+    players[loserIndex].hand = [...players[loserIndex].hand, ...state.discardPile];
+
+    // LOGIC FOR WIN PENDING
+    let gameFinished = false;
+    let winnerId = null;
+
+    if (state.winPending) {
+      if (isLie) {
+        // Potential winner LIED. They pick up. Win cancelled.
+        state.winPending = false;
+        state.potentialWinnerId = null;
+      } else {
+        // Potential winner told TRUTH. Challenger picks up.
+        // Potential winner still has 0 cards. THEY WIN.
+        gameFinished = true;
+        winnerId = players[claim.playerIdx].id;
+      }
+    }
+
+    transaction.update(gameRef, {
+      players: players,
+      status: gameFinished ? "finished" : "playing",
+      "gameState.discardPile": [],
+      "gameState.lastClaim": { 
+        ...claim, 
+        bsResult: `BS Called! ${isLie ? "It was a LIE!" : "It was TRUE!"} ${players[loserIndex].name} picked up.` 
+      },
+      "gameState.bsActive": false,
+      "gameState.winPending": state.winPending,
+      "gameState.potentialWinnerId": state.potentialWinnerId,
+      "gameState.winnerId": winnerId,
+      "gameState.truthVotes": [] // Reset votes on BS
+    });
+  });
+};
+
+// Upload a player's hand commitment (poseidon hash) to their player record.
+export const uploadHandCommitment = async (gameCode, userId, commitment, opts = {}) => {
+  const gameRef = doc(db, "games", gameCode);
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw "Game not found";
+    const data = gameDoc.data();
+    const players = data.players || [];
+    const idx = players.findIndex(p => p.id === userId);
+    if (idx === -1) throw "Player not found";
+    players[idx].handCommitment = commitment;
+    players[idx].localSaved = opts.localSaved ? true : false;
+
+    // Do NOT scrub here. Finalization/scrubbing should be done explicitly
+    // by calling `finalizeCommitments(gameCode)` to avoid race conditions.
+
+    transaction.update(gameRef, { players });
+  });
+};
+
+// Finalize commitments: scrub raw hands to placeholders when all players have committed and saved locally.
+export const finalizeCommitments = async (gameCode) => {
+  const gameRef = doc(db, "games", gameCode);
+  await runTransaction(db, async (transaction) => {
+    const gameDoc = await transaction.get(gameRef);
+    if (!gameDoc.exists()) throw "Game not found";
+    const data = gameDoc.data();
+    const players = data.players || [];
+
+    const allCommitted = players.every(p => p.handCommitment);
+    const allSaved = players.every(p => p.localSaved);
+    if (!(allCommitted && allSaved)) throw "Not all players have committed and saved";
+
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      const count = Array.isArray(p.hand) ? p.hand.length : (p.handCount || 0);
+      players[i].hand = Array(count).fill({ hidden: true });
+    }
+
+    transaction.update(gameRef, { players, "gameState.handsScrubbed": true });
+  });
+};
+
+// NEW FUNCTION: Handles the voting logic
+export const voteTruth = async (gameCode, userId) => {
+    const gameRef = doc(db, "games", gameCode);
+    await runTransaction(db, async (transaction) => {
+        const gameDoc = await transaction.get(gameRef);
+        const data = gameDoc.data();
+        const state = data.gameState;
+        
+        if (!state.winPending || !state.potentialWinnerId) return;
+        if (userId === state.potentialWinnerId) return; // Winner cannot vote for themselves
+
+        const currentVotes = state.truthVotes || [];
+        
+        // Add vote if not already there
+        if (!currentVotes.includes(userId)) {
+            const newVotes = [...currentVotes, userId];
+            const requiredVotes = data.players.length - 1; // All players except the potential winner
+
+            if (newVotes.length >= requiredVotes) {
+                // ALL VOTED TRUTH -> CONFIRM WIN
+                transaction.update(gameRef, {
+                    status: "finished",
+                    "gameState.winnerId": state.potentialWinnerId,
+                    "gameState.winPending": false,
+                    "gameState.truthVotes": newVotes
+                });
+            } else {
+                // ADD VOTE AND WAIT
+                transaction.update(gameRef, {
+                    "gameState.truthVotes": newVotes
+                });
+            }
+        }
+    });
+};
+
+export const skipBS = async (gameCode) => {
+    // Just closes the BS window of opportunity if needed, or handled automatically by next turn
+    // Usually, you don't need a specific "Skip BS" unless you implement a timer or voting.
+    // For this version, we assume BS is available until the next person plays.
+};
+
+export function gameCode() {
+  return Math.random()
+    .toString(36)
+    .substring(2, 8)
+    .toUpperCase(); 
+}
+const dec = "NOOR-SALISBURY"
+
+export function encodeGameState(data) {
+    const jsonString = JSON.stringify(data);
+    const codeUnits = new TextEncoder().encode(jsonString);
+    const scrambled = codeUnits.map((byte, i) => 
+      byte ^ dec.charCodeAt(i % dec.length)
+    );
+    const binString = String.fromCharCode(...scrambled);
+    return btoa(binString);
+  };
+
+export function decodeGameState(encodedData) {
+    try {
+      const binString = atob(encodedData);
+      const bytes = Uint8Array.from(binString, (m) => m.charCodeAt(0));
+      const unscrambled = bytes.map((byte, i) => 
+        byte ^ dec.charCodeAt(i % dec.length)
+      );
+      const jsonString = new TextDecoder().decode(unscrambled);
+      return JSON.parse(jsonString);
+    } catch (e) {
+      console.error("Tampering detected or invalid data format", e);
+      return null;
+    }
+  };
