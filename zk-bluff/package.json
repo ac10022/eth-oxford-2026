@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
@@ -14,7 +14,6 @@
     "firebase": "^12.9.0",
     "lucide-react": "^0.562.0",
     "next": "^16.1.6",
-    "next.js": "^1.0.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "snarkjs": "^0.7.6"
