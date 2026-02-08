@@ -95,17 +95,17 @@ export default function OnlineGame() {
     const { players, gameState } = game;
     const myPlayerIndex = players.findIndex(p => p.id === userId);
     let myHand = players[myPlayerIndex]?.hand || [];
-    // try {
-    //     const stored = localStorage.getItem('my_hand');
-    //     if (stored) {
-    //         const parsed = JSON.parse(stored);
-    //         if (players[myPlayerIndex] && players[myPlayerIndex].id === userId) {
-    //             myHand = parsed;
-    //         }
-    //     }
-    // } catch (e) {
-    //     // ignore parse errors and fallback to server hand
-    // }
+    try {
+        const stored = localStorage.getItem('my_hand');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (players[myPlayerIndex] && players[myPlayerIndex].id === userId) {
+                myHand = parsed;
+            }
+        }
+    } catch (e) {
+        // ignore parse errors and fallback to server hand
+    }
     const isMyTurn = gameState.turnIndex === myPlayerIndex;
     const targetRank = gameState.targetRank;
     const lastClaim = gameState.lastClaim;
