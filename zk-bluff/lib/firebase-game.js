@@ -54,10 +54,50 @@ export const joinGameRoom = async (gameCode, playerName, userId) => {
 };
 
 export const subscribeToGame = (gameCode, callback) => {
-  return onSnapshot(doc(db, "games", gameCode), (doc) => {
-    if (doc.exists()) callback(doc.data());
+  let lastHandCount = null;
+
+  return onSnapshot(doc(db, "games", gameCode), (snap) => {
+    if (!snap.exists()) return;
+
+    const data = snap.data();
+
+    try {
+      const uid = localStorage.getItem("zk_user_id");
+      if (!uid) {
+        callback(data);
+        return;
+      }
+
+      const players = data.players || [];
+      const myIdx = players.findIndex(p => p.id === uid);
+
+      if (myIdx !== -1) {
+        const me = players[myIdx];
+
+        const serverHandCount = Array.isArray(me.hand)
+          ? me.hand.length
+          : me.handCount;
+
+        // 🚨 Hand size increased → BS pickup or draw → resync
+        if (
+          typeof serverHandCount === "number" &&
+          lastHandCount !== null &&
+          serverHandCount > lastHandCount
+        ) {
+          localStorage.removeItem("my_hand");
+        }
+
+        lastHandCount = serverHandCount;
+      }
+    } catch (e) {
+      // If anything goes wrong, fail safe
+      localStorage.removeItem("my_hand");
+    }
+
+    callback(data);
   });
 };
+
 
 export const startGame = async (gameCode) => {
   const gameRef = doc(db, "games", gameCode);
