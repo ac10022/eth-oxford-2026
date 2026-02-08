@@ -78,10 +78,8 @@ export default function OnlineGame() {
                 const myIdx = (data.players || []).findIndex(p => p.id === uid);
                 if (myIdx !== -1) {
                     const p = data.players[myIdx];
-                    // Always mirror the server-side hand for the local player into localStorage
-                    // This ensures picks-up of the discard pile (including placeholder cards)
-                    // are reflected immediately in the UI instead of leaving a stale copy.
-                    if (Array.isArray(p.hand)) {
+                    // If server hands contain real card objects (not hidden placeholders), mirror them in localStorage
+                    if (Array.isArray(p.hand) && p.hand.length > 0 && p.hand[0] && p.hand[0].rank) {
                         localStorage.setItem('my_hand', JSON.stringify(p.hand));
                     }
                 }
