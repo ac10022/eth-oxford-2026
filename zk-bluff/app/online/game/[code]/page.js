@@ -99,14 +99,9 @@ export default function OnlineGame() {
         const stored = localStorage.getItem('my_hand');
         if (stored) {
             const parsed = JSON.parse(stored);
-            if (parsed.length <= myHand.length) {
+            if (players[myPlayerIndex] && players[myPlayerIndex].id === userId) {
                 myHand = parsed;
-            } else {
-                localStorage.removeItem('my_hand');
             }
-            // if (players[myPlayerIndex] && players[myPlayerIndex].id === userId) {
-            //     myHand = parsed;
-            // }
         }
     } catch (e) {
         // ignore parse errors and fallback to server hand
