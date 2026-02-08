@@ -94,29 +94,7 @@ export default function OnlineGame() {
 
     const { players, gameState } = game;
     const myPlayerIndex = players.findIndex(p => p.id === userId);
-    let myHand = [];
-
-    const me = players[myPlayerIndex];
-
-    if (me) {
-    // 1. Prefer localStorage if it exists
-    try {
-        const stored = localStorage.getItem("my_hand");
-        if (stored) {
-        myHand = JSON.parse(stored);
-        }
-    } catch {}
-
-    // 2. Otherwise ONLY trust server hand if it has real cards
-    if (
-        myHand.length === 0 &&
-        Array.isArray(me.hand) &&
-        me.hand.length > 0 &&
-        me.hand[0]?.rank // <-- critical check
-    ) {
-        myHand = me.hand;
-    }
-    }
+    let myHand = players[myPlayerIndex]?.hand || [];
     try {
         const stored = localStorage.getItem('my_hand');
         if (stored) {
