@@ -9,7 +9,7 @@ import { encodeGameState, decodeGameState } from '@/lib/xor';
 
 export default function Home() {
   const router = useRouter();
-  const searchParams = useSearchParams(); 
+  const getSearchParams = () => new URLSearchParams(window.location.search);
 
   // --- STATE ---
   const [hand, setHand] = useState([])
@@ -136,7 +136,7 @@ export default function Home() {
 
   // --- LOAD GAME DATA ---
   useEffect(() => {
-    const data = searchParams.get("data");
+    const data = getSearchParams().get("data");
     if (data) {
       const decrypted = decodeGameState(data);
       if (decrypted) {
@@ -186,7 +186,7 @@ export default function Home() {
         setHand(hands[0])
         setTargetRank("A")
     }
-  }, [searchParams]);
+  }, []);
 
   return (
     

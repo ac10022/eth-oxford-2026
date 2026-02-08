@@ -6,7 +6,7 @@ import { encodeGameState, decodeGameState } from '@/lib/xor';
 
 export default function offline() {
     const router = useRouter();
-    const searchParams = useSearchParams();
+    const getSearchParams = () => new URLSearchParams(window.location.search);
 
     const [joker, setJoker] = useState(false);
     const [aiPlayer, setAiPlayer] = useState(false);
@@ -32,7 +32,7 @@ export default function offline() {
     }
 
     useEffect(() => {
-        const data = searchParams.get("data");
+        const data = getSearchParams().get("data");
         if (data) {
             const decrypted = decodeGameState(data);
             if (decrypted) {
@@ -44,7 +44,7 @@ export default function offline() {
                 setSavedGameState(decrypted);
             }
         }
-    }, [searchParams]);
+    }, []);
 
     const setSettingsFunc = () => {
         setSettings(true);
